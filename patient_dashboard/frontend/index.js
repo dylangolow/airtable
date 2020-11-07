@@ -8,7 +8,7 @@ import {
     FieldPickerSynced,
     Box,
     FormField,
-    Select, Text, Label, Icon, useViewport, Heading
+    Select, Text, Label, Icon, useViewport, Heading, useSettingsButton, Button
 } from '@airtable/blocks/ui';
 import {FieldType} from "@airtable/blocks/models";
 import React, {useEffect, useState} from 'react';
@@ -19,6 +19,7 @@ import moment from 'moment';
 // Install them by running this in the terminal:
 // npm install chart.js react-chartjs-2
 import {Bar} from 'react-chartjs-2';
+import {viewport} from "@airtable/blocks";
 
 const GlobalConfigKeys = {
     TABLE_ID: 'tableId',
@@ -47,7 +48,7 @@ function Dashboard() {
     const [initialEval, setInitialEval] = useState(null);
     const [stateRecords, setStateRecords] = useState([]);
     const [objectives, setObjectives] = useState([]);
-
+    const [showSettings, setShowSettings] = useState(false);
 
     let records;
 
@@ -73,6 +74,7 @@ function Dashboard() {
                             return rec.getCellValue(`${column}`);
                         }).sort()];
                         const uniqueSet = new Set(newArray);
+                        // console.log('uniqueSet.values()', uniqueSet.values());
                         const finalArray = [...uniqueSet.values()].map((each) => {
                             return {value: each, label: each};
                         })
@@ -89,52 +91,31 @@ function Dashboard() {
                         // console.log('setting state records');
                         setStateRecords(records);
                     }
-                    console.log('records.length', records.length);
+                    // console.log('records.length', records.length);
                     if (value && records && records.length > 0) {
                         const exists = records.find((record) => record.getCellValue('Eval Type') === 'A' && record.getCellValue(`${xFieldId}`) === value);
-                        console.log('exists', exists);
+                        // console.log('exists', exists);
                         handleSetEval(exists);
-
-                        // if (initialEval) {
-                        //     // set objectives fields
-                        //     const ratingFields = table.fields.filter(field => field.type === 'rating' && field.name !== 'Sleep Quality');
-                        //     // anything over 4 stars
-                        //     const patientObjectives = [];
-                        //     for (const f in ratingFields) {
-                        //         const name = f.name;
-                        //         const value = initialEval.getCellValue(f.name);
-                        //         if (value > 4) {
-                        //             patientObjectives.push({name, value});
-                        //         }
-                        //     }
-                        //     console.log('patientObjectives', patientObjectives);
-                        //     setObjectives(patientObjectives);
-                        // }
-
                     }
                 }
             }
         })();
     }, [table, view, xFieldId, value]);
 
-    useEffect( () => {
+    useEffect(() => {
         (async () => {
             if (table && initialEval && value) {
                 // set objectives fields
                 const ratingFields = table.fields.filter(field => field.type === 'rating' && field.name !== 'Sleep Quality' && field.description?.includes('OBJ'));
-                console.log('ratingFields', ratingFields);
+                // console.log('ratingFields', ratingFields);
                 // anything over 4 stars
                 const patientObjectives = [];
                 for (const f of ratingFields) {
-                        console.log('f', f);
-                        console.log('f.name', f.name);
-                        const name = f.name;
-                        const value = initialEval.getCellValue(f.name);
-                        if (value >= 4) {
-                            patientObjectives.push({name, value});
-                        }
+                    const name = f.name;
+                    const value = initialEval.getCellValue(f.name);
+                    if (value >= 4) patientObjectives.push({name, value});
                 }
-                console.log('patientObjectives', patientObjectives);
+                // console.log('patientObjectives', patientObjectives);
                 setObjectives(patientObjectives);
             }
         })();
@@ -159,75 +140,84 @@ function Dashboard() {
         }
     }
 
-    const handleValueChange = (value) => {
-
-        setValue(value);
-    }
-
     const viewport = useViewport();
+
+    useSettingsButton(() => setShowSettings(!showSettings));
+
     const Setup = () => {
 
         return (
-            <Box>
-                <FormField label="Table" width="25%" paddingRight={1} marginBottom={0}>
+            <Box padding={4} display="flex" alignContent="center" justifyContent="content" flexDirection="column">
+                <FormField label="Table">
                     <TablePickerSynced
                         globalConfigKey={GlobalConfigKeys.TABLE_ID}
                         onChange={() => handleResetValues.resetTable()}
                     />
                 </FormField>
+                {table && (
+                    <FormField label="View" paddingX={1}>
+                        <ViewPickerSynced
+                            table={table}
+                            globalConfigKey={GlobalConfigKeys.VIEW_ID}
+                            onChange={() => handleResetValues.resetView()}
+                        />
+                    </FormField>
+                )}
+                <Button variant="primary" onClick={() => setShowSettings(false)} disabled={!(!!table && !!view)}>Save</Button>
             </Box>
         );
     }
 
+    if (showSettings) {
+        return <Setup/>
+    }
+
+
     return (
         <>
-            {table ?
-                (<Box
-                    position="absolute"
-                    top={0}
-                    left={0}
-                    right={0}
-                    bottom={0}
-                    display="flex"
-                    flexDirection="column"
-                >
-                    <Settings table={table} xFieldValues={options} setFieldValue={setValue}
-                              handleResetValues={handleResetValues}/>
-                    {selected && initialEval ? (
-                        <>
-                            {/*<Box position="relative" flex="auto" padding={3}>*/}
-                            <Box position="relative" flex="auto" flexWrap="wrap" padding={3}>
-                                <div style={{display: "flex", maxWidth: viewport.width, flexWrap: "wrap"}}>
-                                    <PatientInfo initialEval={initialEval}/>
-                                    <div style={{
-                                        display: "flex",
-                                        maxWidth: viewport.width,
-                                        flexWrap: "wrap",
-                                        flexDirection: "column"
-                                    }}>
-                                        <NumericStats records={stateRecords}/>
-                                        <MedHistory initialEval={initialEval}/>
-                                        <HealthTags initialEval={initialEval}/>
-                                    </div>
-
-                                </div>
-                                <div style={{display: "flex", maxWidth: viewport.width, flexWrap: "wrap"}}>
-
-                                    <Objectives initialEval={initialEval} objectives={objectives}/>
-
+            <Box
+                position="absolute"
+                top={0}
+                left={0}
+                right={0}
+                bottom={0}
+                display="flex"
+                flexDirection="column"
+            >
+                <Settings table={table} xFieldValues={options} setFieldValue={setValue}
+                          handleResetValues={handleResetValues}/>
+                {selected && initialEval ? (
+                    <>
+                        {/*<Box position="relative" flex="auto" padding={3}>*/}
+                        <Box position="relative" flex="auto" flexWrap="wrap" padding={3}>
+                            <div style={{display: "flex", maxWidth: viewport.width, flexWrap: "wrap"}}>
+                                <PatientInfo initialEval={initialEval}/>
+                                <div style={{
+                                    display: "flex",
+                                    maxWidth: viewport.width,
+                                    flexWrap: "wrap",
+                                    flexDirection: "column"
+                                }}>
+                                    <NumericStats table={table} initialEval={initialEval} records={stateRecords}/>
+                                    <MedHistory table={table} initialEval={initialEval}/>
+                                    <HealthTags initialEval={initialEval}/>
                                 </div>
 
-                            </Box>
-                            <Box position="relative" flex="auto" padding={3}>
-                                <Charts/>
-                            </Box>
-                            {/*</Box>*/}
-                        </>
-                    ) : <DashboardTile><Heading>Could not find patient data...</Heading></DashboardTile>}
-                </Box>)
-                :
-                <Setup/>
-            }
+                            </div>
+                            <div style={{display: "flex", maxWidth: viewport.width, flexWrap: "wrap"}}>
+
+                                <Objectives initialEval={initialEval} objectives={objectives}/>
+
+                            </div>
+
+                        </Box>
+                        <Box position="relative" flex="auto" padding={3}>
+                            <Charts/>
+                        </Box>
+                        {/*</Box>*/}
+                    </>
+                ) : <DashboardTile><Heading>Could not find patient data...</Heading></DashboardTile>}
+            </Box>
         </>
 
     );
@@ -273,21 +263,13 @@ const NoEvalTile = () => <DashboardTile>
 </DashboardTile>
 
 const PatientInfo = ({initialEval}) => {
-    // console.log('initialEval', initialEval);
-
-    const calculateAge = (dateOfBirth) => {
-        const today = new Date();
-        const dob = new Date(dateOfBirth);
-        const calcAge = moment().diff(moment(dateOfBirth), 'years');
-        // console.log(`today: ${today} | dob: ${dob} | calcAge: ${calcAge}`);
-        return calcAge;
-    }
+    const calculateAge = (dateOfBirth) => moment().diff(moment(dateOfBirth), 'years');
     const age = initialEval ? calculateAge(initialEval.getCellValue('DoB')) : 'Unknown';
-    // console.log('calculateAge', calculateAge(initialEval.getCellValue('DoB')));
 
     return (
         <>{initialEval ?
             <DashboardTile>
+                <Label>GENERAL INFO</Label>
                 <table>
                     <tr>
                         <td><TableText>Patient Name </TableText></td>
@@ -334,22 +316,19 @@ const Objectives = ({initialEval, objectives}) => {
         return (
             <>
                 {objectives && objectives.length > 0 ?
-                    <table>
+                    <table style={{width: "100%"}}>
                         {objectives.map(obj =>
-                        <tr style={{display:"flex", justifyContent: "space-between", margin: 5, width: "100%"}}>
-                            <td style={{margin: 5}}>{obj.name}</td>
-                            <td style={{margin: 5, alignSelf: "end", textAlign: "end"}}>
-                                {obj.value}
-                                {Array((obj.value)).map(() => (<Icon name="star" />))}
-                            </td>
-                        </tr>)}
-
+                            <tr style={{display: "flex", justifyContent: "space-between", margin: 5, width: "100%"}}
+                                key={obj.name}>
+                                <td style={{margin: 5}}>{obj.name}</td>
+                                <td style={{margin: 5, alignSelf: "end", textAlign: "end"}}>
+                                    <div>{Array(obj.value * 1).fill(true).map(o => <Icon name="star" size={24}/>)}</div>
+                                </td>
+                            </tr>)}
                     </table>
-
-                :
-                <NoEvalTile/>
-            }
-
+                    :
+                    <NoEvalTile/>
+                }
             </>
         );
     }
@@ -362,7 +341,7 @@ const Objectives = ({initialEval, objectives}) => {
                 padding={3}
                 borderRadius="large"
                 backgroundColor="lightGray1"
-                minWidth="33%"
+                minWidth={400}
                 maxWidth="50%"
             >
                 <Label>OBJECTIVES</Label>
@@ -375,21 +354,34 @@ const Objectives = ({initialEval, objectives}) => {
     );
 }
 
-const NumericStats = ({records}) => {
+const NumericStats = ({table, initialEval, records}) => {
+
+    const weightField = table ? table.fields.filter(field => field.description?.includes("WEIGHT"))[0] : null;
+    const heightField = table ? table.fields.filter(field => field.description?.includes("HEIGHT"))[0] : null;
+
+    const sortByField = (field) => (a, b) => b.getCellValue(`${field}`) - a.getCellValue(`${field}`);
+
+    console.log(`weightField: ${weightField} | heightField: ${heightField}`);
+    console.log(`weightField.name: ${weightField.name} | heightField.name: ${heightField.name}`);
+    console.log('[...records.sort(sortByField(\'Date Created\'))][0]', [...records.sort(sortByField('Date Created'))]);
+
+    const latestWeight = weightField && records && records.length > 0 ? [...records.sort(sortByField('Date Created'))][0].getCellValue(weightField.name) : null;
+    const latestHeight = heightField && records && records.length > 0 ? [...records.sort(sortByField('Date Created'))][0].getCellValue(heightField.name) : null;
+    const bmi = latestWeight && latestHeight ? (Number((latestWeight) / Math.pow(latestHeight / 100, 2))).toFixed(2) : 'N/A';
 
     const values = [
         {
-            value: 28,
+            value: bmi,
             units: '',
             label: 'BMI'
         },
         {
-            value: 92,
+            value: latestWeight,
             units: 'kg',
             label: 'Weight'
         },
         {
-            value: 182,
+            value: latestHeight,
             units: 'cm',
             label: 'Height'
         },
@@ -414,7 +406,12 @@ const NumericStats = ({records}) => {
     );
 }
 
-const MedHistory = ({initialEval}) => {
+const MedHistory = ({table, initialEval}) => {
+
+    const medUse = [
+        'Diabetes',
+        'Blood Pressure'
+    ];
 
     const familyHistory = [
         'Diabetes',
@@ -428,6 +425,13 @@ const MedHistory = ({initialEval}) => {
     return (
         <>
             <DashboardTile>
+                <Box padding={1} marginBottom={2}>
+                    <Label>
+                        Medicine usage:
+                    </Label>
+                    {medUse && medUse.length > 0 ? <Text>{medUse.join(', ')}</Text> :
+                        <Text>None</Text>}
+                </Box>
                 <Box padding={1} marginBottom={2}>
                     <Label>
                         Family History for Conditions:
@@ -448,7 +452,8 @@ const MedHistory = ({initialEval}) => {
 }
 
 const HTag = ({label, renderIcon}) => <>
-    <Box display="flex" alignItems="center" justifyContent="center" flexDirection="column" flexBasis="content" key={label}
+    <Box display="flex" alignItems="center" justifyContent="center" flexDirection="column" flexBasis="content"
+         key={label}
          margin={0}>
         <Box>
             {renderIcon}
@@ -558,26 +563,25 @@ const FieldValueSelect = ({options, setFieldValue}) => {
 
 function Settings({table, xFieldValues, setFieldValue, handleResetValues}) {
 
-    const fieldsOptions = [];
     return (
-        <Box display="flex" padding={3} borderBottom="thick">
+        <Box display="flex" padding={3} borderBottom="thick" maxWidth={viewport.width}>
             <FormField label="Table" width="25%" paddingRight={1} marginBottom={0}>
                 <TablePickerSynced
                     globalConfigKey={GlobalConfigKeys.TABLE_ID}
                     onChange={() => handleResetValues.resetTable()}
                 />
             </FormField>
-            {/*{table && (*/}
-            {/*    <FormField label="View" width="25%" paddingX={1} marginBottom={0}>*/}
-            {/*        <ViewPickerSynced*/}
-            {/*            table={table}*/}
-            {/*            globalConfigKey={GlobalConfigKeys.VIEW_ID}*/}
-            {/*            onChange={() => handleResetValues.resetView()}*/}
-            {/*        />*/}
-            {/*    </FormField>*/}
-            {/*)}*/}
             {table && (
-                <FormField label="Filter by" width="25%" paddingLeft={1} marginBottom={0}>
+                <FormField label="View" width="25%" paddingX={1} marginBottom={0}>
+                    <ViewPickerSynced
+                        table={table}
+                        globalConfigKey={GlobalConfigKeys.VIEW_ID}
+                        onChange={() => handleResetValues.resetView()}
+                    />
+                </FormField>
+            )}
+            {table && (
+                <FormField label="Filter by" width="25%" paddingX={1} marginBottom={0}>
                     <FieldPickerSynced
                         table={table}
                         globalConfigKey={GlobalConfigKeys.X_FIELD_ID}
@@ -586,9 +590,10 @@ function Settings({table, xFieldValues, setFieldValue, handleResetValues}) {
                     />
                 </FormField>
             )}
-            {xFieldValues.length > 0 && (
-                <FormField label="Filter value" width="25%" paddingLeft={1} marginBottom={0}>
-                    <FieldValueSelect options={xFieldValues} setFieldValue={setFieldValue}/>
+            {console.log('xFieldValues', xFieldValues)}
+            {xFieldValues && xFieldValues.length > 0 && (
+                <FormField label="Filter value" width="25%" paddingRight={1} marginBottom={0}>
+                    <FieldValueSelect maxWidth={50} width="25%" options={xFieldValues} setFieldValue={setFieldValue}/>
                 </FormField>
             )}
         </Box>

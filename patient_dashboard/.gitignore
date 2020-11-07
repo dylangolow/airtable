@@ -1,3 +1,3 @@
-node_modules
-.airtableAPIKey
-build
+/node_modules
+/.airtableblocksrc.json
+/build
