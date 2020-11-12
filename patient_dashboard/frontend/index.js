@@ -20,6 +20,7 @@ import moment from 'moment';
 // npm install chart.js react-chartjs-2
 import {Bar} from 'react-chartjs-2';
 import {viewport} from "@airtable/blocks";
+import Charts from "./components/dashboard_charts";
 
 const GlobalConfigKeys = {
     TABLE_ID: 'tableId',
@@ -70,7 +71,9 @@ function Dashboard() {
                     await queryValues.loadDataAsync();
                     if (queryValues.records && queryValues.records.length > 0) {
                         let column = xFieldId;
-                        let newArray = [...queryValues.records.filter(rec => typeof rec.getCellValue(`${column}`) !== 'object').map((rec) => {
+                        let newArray = [...queryValues.records
+                            .filter(rec => typeof rec.getCellValue(`${column}`) !== 'object')
+                            .map((rec) => {
                             return rec.getCellValue(`${column}`);
                         }).sort()];
                         const uniqueSet = new Set(newArray);
@@ -93,7 +96,9 @@ function Dashboard() {
                     }
                     // console.log('records.length', records.length);
                     if (value && records && records.length > 0) {
-                        const exists = records.find((record) => record.getCellValue('Eval Type') === 'A' && record.getCellValue(`${xFieldId}`) === value);
+                        const exists = records.find((record) =>
+                            record.getCellValue('Eval Type') === 'A'
+                            && record.getCellValue(`${xFieldId}`) === value);
                         // console.log('exists', exists);
                         handleSetEval(exists);
                     }
@@ -191,7 +196,7 @@ function Dashboard() {
                         {/*<Box position="relative" flex="auto" padding={3}>*/}
                         <Box position="relative" flex="auto" flexWrap="wrap" padding={3}>
                             <div style={{display: "flex", maxWidth: viewport.width, flexWrap: "wrap"}}>
-                                <PatientInfo initialEval={initialEval}/>
+                                <PatientInfo table={table} initialEval={initialEval}/>
                                 <div style={{
                                     display: "flex",
                                     maxWidth: viewport.width,
@@ -200,7 +205,7 @@ function Dashboard() {
                                 }}>
                                     <NumericStats table={table} initialEval={initialEval} records={stateRecords}/>
                                     <MedHistory table={table} initialEval={initialEval}/>
-                                    <HealthTags initialEval={initialEval}/>
+                                    <HealthTags table={table} initialEval={initialEval}/>
                                 </div>
 
                             </div>
@@ -212,11 +217,11 @@ function Dashboard() {
 
                         </Box>
                         <Box position="relative" flex="auto" padding={3}>
-                            <Charts/>
+                            <Charts table={table} records={stateRecords} />
                         </Box>
                         {/*</Box>*/}
                     </>
-                ) : <DashboardTile><Heading>Could not find patient data...</Heading></DashboardTile>}
+                ) : <DashboardTile><Heading>Não foi possível encontrar os dados do paciente...</Heading></DashboardTile>}
             </Box>
         </>
 
@@ -258,13 +263,57 @@ const TableText = ({children, ...props}) => <Text padding={1} margin={2} {...pro
 
 const NoEvalTile = () => <DashboardTile>
     <Heading>
-        No data found.
+        Nenhum dado encontrado.
     </Heading>
 </DashboardTile>
 
-const PatientInfo = ({initialEval}) => {
-    const calculateAge = (dateOfBirth) => moment().diff(moment(dateOfBirth), 'years');
-    const age = initialEval ? calculateAge(initialEval.getCellValue('DoB')) : 'Unknown';
+const PatientInfo = ({table, initialEval}) => {
+    const calculateAge = (dobField) => {
+        return {
+            ...setLabel(dobField, "#AGE_LABEL#"),
+            value: moment().diff(moment(dobField.value), 'years')
+        }
+    }
+    // const dobField = table ? table.fields.filter(field => field.description?.includes("#DoB#"))[0] : null;
+    const dob = table ? table.fields.filter(field => field.description?.includes("#DoB#")).map(field => {
+        return {
+            description: field.description,
+            ...setLabel(field),
+            value: initialEval.getCellValueAsString(field.id)
+        }
+    })[0] : '';
+    const age = initialEval && dob.description ? calculateAge(dob) : null;
+    const name = table ? table.fields.filter(field => field.description?.includes("#NAME#")).map(field => {
+        return {
+            ...setLabel(field),
+            value: initialEval.getCellValueAsString(field.id)
+        }
+    })[0] : '';
+    const email = table ? table.fields.filter(field => field.description?.includes("#EMAIL#")).map(field => {
+        return {
+            ...setLabel(field),
+            value: initialEval.getCellValueAsString(field.id)
+        }
+    })[0] : '';
+    const sex = table ? table.fields.filter(field => field.description?.includes("#SEX#")).map(field => {
+        return {
+            ...setLabel(field),
+            value: initialEval.getCellValueAsString(field.id)
+        }
+    })[0] : '';
+    const contact = table ? table.fields.filter(field => field.description?.includes("#CONTACT#")).map(field => {
+        return {
+            ...setLabel(field),
+            value: initialEval.getCellValueAsString(field.id)
+        }
+    })[0] : '';
+    const phone = table ? table.fields.filter(field => field.description?.includes("#PHONE#")).map(field => {
+        return {
+            ...setLabel(field),
+            value: initialEval.getCellValueAsString(field.id)
+        }
+    })[0] : '';
+
 
     return (
         <>{initialEval ?
@@ -272,32 +321,32 @@ const PatientInfo = ({initialEval}) => {
                 <Label>GENERAL INFO</Label>
                 <table>
                     <tr>
-                        <td><TableText>Patient Name </TableText></td>
-                        <td><TableText>{initialEval.getCellValueAsString('Name')}</TableText></td>
+                        <td><TableText>{name?.label || ''} </TableText></td>
+                        <td><TableText>{name?.value || ''}</TableText></td>
                     </tr>
                     <tr>
-                        <td><TableText>Email </TableText></td>
-                        <td><TableText>{initialEval.getCellValueAsString('Email')}</TableText></td>
+                        <td><TableText>{email?.label || ''}</TableText></td>
+                        <td><TableText>{email?.value || ''}</TableText></td>
                     </tr>
                     <tr>
-                        <td><TableText>Age </TableText></td>
-                        <td><TableText>{age}</TableText></td>
+                        <td><TableText>{age?.label || ''}</TableText></td>
+                        <td><TableText>{age?.value || ''}</TableText></td>
                     </tr>
                     <tr>
-                        <td><TableText>DoB </TableText></td>
-                        <td><TableText>{initialEval.getCellValueAsString('DoB')}</TableText></td>
+                        <td><TableText>{dob?.label || ''}</TableText></td>
+                        <td><TableText>{dob?.value || ''}</TableText></td>
                     </tr>
                     <tr>
-                        <td><TableText>Gender </TableText></td>
-                        <td><TableText>{initialEval.getCellValueAsString('Sex')}</TableText></td>
+                        <td><TableText>{sex?.label || ''}</TableText></td>
+                        <td><TableText>{sex?.value || ''}</TableText></td>
                     </tr>
                     <tr>
-                        <td><TableText>Preferred Contact </TableText></td>
-                        <td><TableText>{initialEval.getCellValueAsString('Contact preference')}</TableText></td>
+                        <td><TableText>{contact?.label || ''}</TableText></td>
+                        <td><TableText>{contact?.value || ''}</TableText></td>
                     </tr>
                     <tr>
-                        <td><TableText>Phone Number </TableText></td>
-                        <td><TableText>{initialEval.getCellValueAsString('Phone Number')}</TableText></td>
+                        <td><TableText>{phone?.label || ''}</TableText></td>
+                        <td><TableText>{phone?.value || ''}</TableText></td>
                     </tr>
                 </table>
             </DashboardTile> : <NoEvalTile/>
@@ -309,9 +358,7 @@ const PatientInfo = ({initialEval}) => {
 const SpacedText = ({children, ...props}) => <Text padding={1} {...props}>{children}</Text>
 
 const Objectives = ({initialEval, objectives}) => {
-
-    console.log('objectives', objectives);
-
+    // console.log('objectives', objectives);
     const renderObjectives = (objectives) => {
         return (
             <>
@@ -342,9 +389,9 @@ const Objectives = ({initialEval, objectives}) => {
                 borderRadius="large"
                 backgroundColor="lightGray1"
                 minWidth={400}
-                maxWidth="50%"
+                maxWidth={600}
             >
-                <Label>OBJECTIVES</Label>
+                <Label>OBJETIVOS</Label>
                 {renderObjectives(objectives)}
             </DashboardTile>
 
@@ -354,16 +401,19 @@ const Objectives = ({initialEval, objectives}) => {
     );
 }
 
+export const sortByField = (field) => (a, b) => b.getCellValue(`${field}`) - a.getCellValue(`${field}`);
+
 const NumericStats = ({table, initialEval, records}) => {
 
-    const weightField = table ? table.fields.filter(field => field.description?.includes("WEIGHT"))[0] : null;
-    const heightField = table ? table.fields.filter(field => field.description?.includes("HEIGHT"))[0] : null;
+    const weightField = table ? table.fields.filter(field => field.description?.includes("#WEIGHT#")).map(field => setLabel(field))[0] : null;
+    const heightField = table ? table.fields.filter(field => field.description?.includes("#HEIGHT#")).map(field => setLabel(field))[0] : null;
 
-    const sortByField = (field) => (a, b) => b.getCellValue(`${field}`) - a.getCellValue(`${field}`);
+    // const sortByField = (field) => (a, b) => b.getCellValue(`${field}`) - a.getCellValue(`${field}`);
 
-    console.log(`weightField: ${weightField} | heightField: ${heightField}`);
-    console.log(`weightField.name: ${weightField.name} | heightField.name: ${heightField.name}`);
-    console.log('[...records.sort(sortByField(\'Date Created\'))][0]', [...records.sort(sortByField('Date Created'))]);
+    // console.log(`weightField: ${weightField} | heightField: ${heightField}`);
+    // console.log(`weightField.name: ${weightField.name} | heightField.name: ${heightField.name}`);
+    // console.log(`weightField.label: ${weightField.label} | heightField.label: ${heightField.label}`);
+    // console.log('[...records.sort(sortByField(\'Date Created\'))][0]', [...records.sort(sortByField('Date Created'))]);
 
     const latestWeight = weightField && records && records.length > 0 ? [...records.sort(sortByField('Date Created'))][0].getCellValue(weightField.name) : null;
     const latestHeight = heightField && records && records.length > 0 ? [...records.sort(sortByField('Date Created'))][0].getCellValue(heightField.name) : null;
@@ -373,19 +423,18 @@ const NumericStats = ({table, initialEval, records}) => {
         {
             value: bmi,
             units: '',
-            label: 'BMI'
+            label: 'IMC'
         },
         {
             value: latestWeight,
             units: 'kg',
-            label: 'Weight'
+            label: weightField.label
         },
         {
             value: latestHeight,
             units: 'cm',
-            label: 'Height'
+            label: heightField.label
         },
-
     ];
 
     return (
@@ -406,56 +455,85 @@ const NumericStats = ({table, initialEval, records}) => {
     );
 }
 
+export const setLabel = (field, labelTag = "#LABEL#") => {
+    const labelTags = (field.description?.match(new RegExp(labelTag,"g")) || []).length;
+    let label;
+    if (labelTags === 2) label = field.description?.split(`${labelTag}`)[1];
+    if (!label || label?.trim() === '') label = field.name;
+    return {...field, label, name: field.name, description: field.description};
+}
+
 const MedHistory = ({table, initialEval}) => {
 
-    const medUse = [
-        'Diabetes',
-        'Blood Pressure'
-    ];
-
-    const familyHistory = [
-        'Diabetes',
-        'Blood Pressure'
-    ];
-    const cancerHistory = [
-        'Bone / Grandmother',
-
-    ];
+    const medFields = table ? table.fields
+        .filter(field => {
+            return field.description?.includes("#MED#") && initialEval.getCellValueAsString(field.id) === 'Sim';
+        })
+        .map(field => {
+            return setLabel(field);
+        })
+        : null;
+    const famFields = table ? table.fields
+        .filter(field => {
+            return field.description?.includes("#FAM#") && initialEval.getCellValueAsString(field.id) !== '';
+        })
+        .map(field => {
+            let fieldWithLabel = setLabel(field);
+            let value = initialEval.getCellValueAsString(field.id);
+            return {...fieldWithLabel, value};
+        })
+        : null;
+    const cancerFields = table ? table.fields
+            .filter(field => {
+                return field.description?.includes("#CAN#") && initialEval.getCellValueAsString(field.id) !== '';
+            })
+            .map(field => {
+                let fieldWithLabel = setLabel(field);
+                let value = initialEval.getCellValueAsString(field.id);
+                return {...fieldWithLabel, value};
+            })
+        : null;
 
     return (
         <>
             <DashboardTile>
                 <Box padding={1} marginBottom={2}>
                     <Label>
-                        Medicine usage:
+                        Uso de remédios:
                     </Label>
-                    {medUse && medUse.length > 0 ? <Text>{medUse.join(', ')}</Text> :
-                        <Text>None</Text>}
+                    {medFields && medFields.length > 0 ? medFields.map(field =>
+                            <Text>{field.label}</Text>) :
+                        <Text>Nenhum</Text>}
                 </Box>
                 <Box padding={1} marginBottom={2}>
                     <Label>
-                        Family History for Conditions:
+                        História da Família:
                     </Label>
-                    {familyHistory && familyHistory.length > 0 ? <Text>{familyHistory.join(', ')}</Text> :
-                        <Text>None</Text>}
+                    {famFields && famFields.length > 0 ? famFields.map(field =>
+                            <>
+                            <Text>{field.label} ({field.value})</Text>
+                            </>) :
+                        <Text>Nenhum</Text>}
                 </Box>
                 <Box padding={1}>
                     <Label>
-                        Cancer History:
+                        História do Câncer:
                     </Label>
-                    {cancerHistory && cancerHistory.length > 0 ? <Text>{cancerHistory.join(', ')}</Text> :
-                        <Text>None</Text>}
+                    {cancerFields && cancerFields.length > 0 ? cancerFields.map(field =>
+                            <>
+                                <Text>{field.label} ({field.value})</Text>
+                            </>) :
+                        <Text>Nenhum</Text>}
                 </Box>
             </DashboardTile>
         </>
     );
 }
 
-const HTag = ({label, renderIcon}) => <>
+const HTag = ({label, renderIcon, key}) => <>
     <Box display="flex" alignItems="center" justifyContent="center" flexDirection="column" flexBasis="content"
-         key={label}
-         margin={0}>
-        <Box>
+         margin={3} padding={2} key={key}>
+        <Box >
             {renderIcon}
         </Box>
         <Box>
@@ -464,80 +542,56 @@ const HTag = ({label, renderIcon}) => <>
     </Box>
 </>
 
-const HealthTags = ({initialEval}) => {
+const HealthTags = ({table, initialEval}) => {
+    const base = useBase();
+    const tagsTable = base.getTableByNameIfExists('TAGS');
+    let attachmentField = tagsTable ? tagsTable.fields.filter(field => field.description?.includes('#ATTACH#'))[0] : null;
+    // console.log('attachmentField', attachmentField);
+    const displayNameField = tagsTable ? tagsTable.fields.filter(field => field.description?.includes('#DISPLAY#'))[0] : null;
+    const tagsRecords = useRecords(tagsTable);
+    // console.log('tagsRecords', tagsRecords);
+    let patientTags = table && initialEval && table.fields.filter(field => field.description?.includes('#TAGS#')).length > 0 ?
+        table.fields.filter(field => field.description?.includes('#TAGS#')).map(field => initialEval.getCellValue(field.id))[0] : null;
+    // if (patientTags?.length > 0) patientTags = patientTags[0].split(',');
+    console.log('patientTags', patientTags);
+    const tags = patientTags?.length > 0 && tagsRecords?.length > 0 && attachmentField ?
 
-    const tags = [
-        {
-            label: 'Heart',
-            renderIcon: <Icon name="heart"/>
-        },
-        {
-            label: 'Shapes',
-            renderIcon: <Icon name="shapes"/>
-        },
-        {
-            label: 'Share',
-            renderIcon: <Icon name="share"/>
-        },
-    ];
+            patientTags.map(tag => {
+                console.log('tag', tag);
+                const record = tagsTable.selectRecords().getRecordById(tag.id);
+                const attachmentObj = record.getCellValue(attachmentField.id)[0];
+                const displayName = record.getCellValueAsString(displayNameField.id);
+                const clientUrl =
+                    record.getAttachmentClientUrlFromCellValueUrl(
+                        attachmentObj.id,
+                        attachmentObj.url
+                    );
+                return {
+                    ...record,
+                    label: displayName,
+                    renderIcon: <img key={attachmentObj.id} src={clientUrl} width={36} alt={record.name} />
+                }
+            })
+        : null;
 
     return (
         <>
             <DashboardTile>
-                <Label>HEALTH / CONDITION TAGS</Label>
-                <div style={{display: "flex", justifyContent: "space-evenly", marginTop: 12}}>
-                    {tags.map(tag =>
-                        <div>
-                            <HTag label={tag.label} renderIcon={tag.renderIcon} key={tag.label}/>
-                        </div>
-                    )}
+                <Label>TAGS DE SAÚDE / CONDIÇÃO</Label>
+                <div>
+                    <Box display="flex" flexWrap="wrap" maxWidth={300} style={{display: "flex", justifyContent: "space-evenly", marginTop: 12, flexWrap: "wrap"}}>
+                        {tags && tags.length > 0 ? tags.map(tag =>
+                            // <div>
+                                <HTag label={tag.label} renderIcon={tag.renderIcon} key={tag.id}/>
+                            // </div>
+                        ) : <Text>Nenhum</Text>}
+                    </Box>
                 </div>
+
 
             </DashboardTile>
         </>
     );
-}
-
-const Charts = () => {
-
-    return (
-        <>
-
-        </>
-    );
-}
-
-function getChartData({records, xField}) {
-    const recordsByXValueString = new Map();
-    for (const record of records) {
-        const xValue = record.getCellValue(xField);
-        const xValueString = xValue === null ? null : record.getCellValueAsString(xField);
-
-        if (!recordsByXValueString.has(xValueString)) {
-            recordsByXValueString.set(xValueString, [record]);
-        } else {
-            recordsByXValueString.get(xValueString).push(record);
-        }
-    }
-
-    const labels = [];
-    const points = [];
-    for (const [xValueString, records] of recordsByXValueString.entries()) {
-        const label = xValueString === null ? 'Empty' : xValueString;
-        labels.push(label);
-        points.push(records.length);
-    }
-
-    const data = {
-        labels,
-        datasets: [
-            {
-                backgroundColor: '#4380f1',
-                data: points,
-            },
-        ],
-    };
-    return data;
 }
 
 const FieldValueSelect = ({options, setFieldValue}) => {
@@ -565,14 +619,14 @@ function Settings({table, xFieldValues, setFieldValue, handleResetValues}) {
 
     return (
         <Box display="flex" padding={3} borderBottom="thick" maxWidth={viewport.width}>
-            <FormField label="Table" width="25%" paddingRight={1} marginBottom={0}>
+            <FormField label="Tabela" width="25%" paddingRight={1} marginBottom={0}>
                 <TablePickerSynced
                     globalConfigKey={GlobalConfigKeys.TABLE_ID}
                     onChange={() => handleResetValues.resetTable()}
                 />
             </FormField>
             {table && (
-                <FormField label="View" width="25%" paddingX={1} marginBottom={0}>
+                <FormField label="Visão" width="25%" paddingX={1} marginBottom={0}>
                     <ViewPickerSynced
                         table={table}
                         globalConfigKey={GlobalConfigKeys.VIEW_ID}
@@ -581,7 +635,7 @@ function Settings({table, xFieldValues, setFieldValue, handleResetValues}) {
                 </FormField>
             )}
             {table && (
-                <FormField label="Filter by" width="25%" paddingX={1} marginBottom={0}>
+                <FormField label="Filtrar por" width="25%" paddingX={1} marginBottom={0}>
                     <FieldPickerSynced
                         table={table}
                         globalConfigKey={GlobalConfigKeys.X_FIELD_ID}
@@ -590,9 +644,8 @@ function Settings({table, xFieldValues, setFieldValue, handleResetValues}) {
                     />
                 </FormField>
             )}
-            {console.log('xFieldValues', xFieldValues)}
             {xFieldValues && xFieldValues.length > 0 && (
-                <FormField label="Filter value" width="25%" paddingRight={1} marginBottom={0}>
+                <FormField label="Valor do filtro" width="25%" paddingRight={1} marginBottom={0}>
                     <FieldValueSelect maxWidth={50} width="25%" options={xFieldValues} setFieldValue={setFieldValue}/>
                 </FormField>
             )}

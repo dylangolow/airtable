@@ -7,9 +7,9 @@ import {
     ViewPickerSynced,
     FieldPickerSynced,
     Box,
-    FormField,
+    FormField, FieldPicker, Button,
 } from '@airtable/blocks/ui';
-import React from 'react';
+import React, {useState} from 'react';
 
 // This app uses chart.js and the react-chartjs-2 packages.
 // Install them by running this in the terminal:
@@ -22,36 +22,32 @@ const GlobalConfigKeys = {
     X_FIELD_ID: 'xFieldId',
 };
 
-function SimpleChartApp() {
-    const base = useBase();
-    const globalConfig = useGlobalConfig();
+function SingleChart({table, deleteTable, id, records}) {
 
-    const tableId = globalConfig.get(GlobalConfigKeys.TABLE_ID);
-    const table = base.getTableByIdIfExists(tableId);
+    const [xField, setXField] = useState(null);
 
-    const viewId = globalConfig.get(GlobalConfigKeys.VIEW_ID);
-    const view = table ? table.getViewByIdIfExists(viewId) : null;
-
-    const xFieldId = globalConfig.get(GlobalConfigKeys.X_FIELD_ID);
-    const xField = table ? table.getFieldByIdIfExists(xFieldId) : null;
-
-    const records = useRecords(view);
 
     const data = records && xField ? getChartData({records, xField}) : null;
 
     return (
         <Box
-            position="absolute"
+            position="relative"
             top={0}
             left={0}
             right={0}
             bottom={0}
             display="flex"
             flexDirection="column"
+            minWidth={400}
+            maxWidth={600}
+            border="default"
+            borderRadius="large"
+            margin={2}
+
         >
-            <Settings table={table} />
+            <Settings table={table} xField={xField} setXField={setXField} deleteTable={deleteTable} id={id} />
             {data && (
-                <Box position="relative" flex="auto" padding={3}>
+                <Box position="relative" flex="auto" padding={3} >
                     <Bar
                         data={data}
                         options={{
@@ -109,27 +105,37 @@ function getChartData({records, xField}) {
     return data;
 }
 
-function Settings({table}) {
+function Settings({table, xField, setXField, deleteTable, id}) {
     return (
-        <Box display="flex" padding={3} borderBottom="thick">
-            <FormField label="Table" width="33.33%" paddingRight={1} marginBottom={0}>
-                <TablePickerSynced globalConfigKey={GlobalConfigKeys.TABLE_ID} />
-            </FormField>
-            {table && (
-                <FormField label="View" width="33.33%" paddingX={1} marginBottom={0}>
-                    <ViewPickerSynced table={table} globalConfigKey={GlobalConfigKeys.VIEW_ID} />
-                </FormField>
-            )}
+        <Box display="flex" padding={3} borderBottom="thick" width="100%" justifyContent="space-between">
+            {/*<FormField label="Table" width="33.33%" paddingRight={1} marginBottom={0}>*/}
+            {/*    <TablePickerSynced globalConfigKey={GlobalConfigKeys.TABLE_ID} />*/}
+            {/*</FormField>*/}
+            {/*{table && (*/}
+            {/*    <FormField label="View" width="33.33%" paddingX={1} marginBottom={0}>*/}
+            {/*        <ViewPickerSynced table={table} globalConfigKey={GlobalConfigKeys.VIEW_ID} />*/}
+            {/*    </FormField>*/}
+            {/*)}*/}
             {table && (
                 <FormField label="X-axis field" width="33.33%" paddingLeft={1} marginBottom={0}>
-                    <FieldPickerSynced
+                    <FieldPicker
                         table={table}
-                        globalConfigKey={GlobalConfigKeys.X_FIELD_ID}
+                        field={xField}
+                        onChange={newField => setXField(newField)}
                     />
                 </FormField>
             )}
+            <Button
+                onClick={() => deleteTable(id)}
+                // right={0}
+                alignSelf="flex-end"
+                justifySelf="flex-end"
+                marginBottom={0}
+            >
+                Remove
+            </Button>
         </Box>
     );
 }
 
-export default SimpleChartApp;
+export default SingleChart;
