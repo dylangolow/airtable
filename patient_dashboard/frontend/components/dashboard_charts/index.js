@@ -16,7 +16,7 @@ function getCharts({table, records, initialEval}) {
         console.log('charts', JSON.stringify(charts));
         console.log('Delete chart ' + index);
         console.log('charts.findIndex(each => each.id === index)', charts.findIndex(each => each.id === index));
-        const deletedChart =  charts.splice(charts.findIndex(each => each.id === index), 1);
+        charts.splice(charts.findIndex(each => each.id === index), 1);
         setCharts([...charts]);
         console.log('charts after delete', JSON.stringify(charts));
     }
@@ -27,9 +27,6 @@ function getCharts({table, records, initialEval}) {
                 charts.map((chart) => <SingleChart id={chart.id} table={table} records={records} deleteTable={handleDeleteTable} />)
                 : null}
         </Box>
-
-
-
             <Button style={{margin: 20}} onClick={() => handleAddChart()}>Add Chart</Button>
         </>
     );

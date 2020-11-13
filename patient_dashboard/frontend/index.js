@@ -3,180 +3,118 @@ import {
     useBase,
     useRecords,
     useGlobalConfig,
-    TablePickerSynced,
-    ViewPickerSynced,
-    FieldPickerSynced,
     Box,
     FormField,
-    Select, Text, Label, Icon, useViewport, Heading, useSettingsButton, Button
+    Select, Text, Label, Icon, useViewport, Heading, Button, Input
 } from '@airtable/blocks/ui';
-import {FieldType} from "@airtable/blocks/models";
-import React, {useEffect, useState} from 'react';
+import React, {Fragment, useEffect, useRef, useState} from 'react';
 import styled from 'styled-components';
-
+import {Highlighter, Typeahead, useItem} from 'react-bootstrap-typeahead';
 import moment from 'moment';
-// This app uses chart.js and the react-chartjs-2 packages.
-// Install them by running this in the terminal:
-// npm install chart.js react-chartjs-2
-import {Bar} from 'react-chartjs-2';
 import {viewport} from "@airtable/blocks";
 import Charts from "./components/dashboard_charts";
-
-const GlobalConfigKeys = {
-    TABLE_ID: 'tableId',
-    VIEW_ID: 'viewId',
-    X_FIELD_ID: 'xFieldId',
-    X_FIELD_VALUE: 'xFieldValue',
-};
+import {Menu} from "react-bootstrap-typeahead";
+import {MenuItem} from "react-bootstrap-typeahead";
+import {TypeaheadMenu} from "react-bootstrap-typeahead";
 
 function Dashboard() {
     const base = useBase();
-    const globalConfig = useGlobalConfig();
 
-    // const [table, setTable] = useState(null);
+    let records;
+    const table = base && base.tables.filter(table => table.description.includes('#EVALS#')) ?
+        base.tables.filter(table => table.description.includes('#EVALS#'))[0] : null;
+    console.log('evalTableExists', table);
 
-    const tableId = globalConfig.get(GlobalConfigKeys.TABLE_ID);
-    let table = base.getTableByIdIfExists(tableId);
+    const canFindInitialEval = table && table.fields.filter(field => field.name === "Eval Type") &&
+        table.fields.filter(field => field.name === "Eval Type").length > 0;
+    console.log('canFindInitialEval', canFindInitialEval);
+    const returnError = (error) => {
+        return (<Box display="flex" justifyContent="center" alignContent="center"
+             borderRadius="large" backgroundColor="lightGray"
+             margin={2} padding={3}>
+            <Heading>{error}</Heading>
+        </Box>);
+    }
 
-    const viewId = globalConfig.get(GlobalConfigKeys.VIEW_ID);
-    let view = table ? table.getViewByIdIfExists(viewId) : null;
+    if (!table || !canFindInitialEval) {
+        let error = !table ? 'Cannot find table tagged with #EVALS#, ensure this tag appears in description to use this dashboard app.' :
+            'Table is missing column "Eval Type" to identify initial evaluation. Ensure the proper table has the #EVALS# tag.'
+        return (returnError(error));
+    }
+    const initialEvalView = table.getViewByNameIfExists('#INITIAL#')
 
-    let xFieldId = globalConfig.get(GlobalConfigKeys.X_FIELD_ID);
-    let xField = table ? table.getFieldByIdIfExists(xFieldId) : null;
+    if (!initialEvalView) {
+        return (returnError('Table is missing view with name #INITIAL# filtered to only the Initial Evaluations.'));
+    }
+
+    let xFieldId = table && table.fields.filter(field => field.description.includes('#EMAIL#')).length > 0 ?
+        table.fields.filter(field => field.description.includes('#EMAIL#'))[0].id : null;
 
     const [options, setOptions] = useState([]);
     const [value, setValue] = useState(null);
     const [initialEval, setInitialEval] = useState(null);
     const [stateRecords, setStateRecords] = useState([]);
-    const [objectives, setObjectives] = useState([]);
-    const [showSettings, setShowSettings] = useState(false);
-
-    let records;
 
     const handleSetEval = (value) => {
-        // console.log('value', value);
+        console.log('handleSetEval value', value);
         setInitialEval(value);
+    }
+
+    const handleSetValue = (value) => {
+        console.log('handleSetValue value', value);
+        setValue(value);
     }
 
     useEffect(() => {
         (async () => {
-            if (table && view) {
-                // console.log('xFieldId', xFieldId);
-                if (xFieldId && !table.getFieldByIdIfExists(xFieldId)) {
-                    xFieldId = null;
-                    handleResetValues.resetTable();
-                }
+            if (table && initialEvalView) {
+                if (xFieldId && !table.getFieldByIdIfExists(xFieldId)) xFieldId = null;
                 if (xFieldId) {
-                    const queryValues = xFieldId ? await table.selectRecordsAsync({fields: [xField]}) : await table.selectRecordsAsync();
+                    const queryValues = await initialEvalView.selectRecordsAsync();
                     await queryValues.loadDataAsync();
                     if (queryValues.records && queryValues.records.length > 0) {
                         let column = xFieldId;
                         let newArray = [...queryValues.records
                             .filter(rec => typeof rec.getCellValue(`${column}`) !== 'object')
                             .map((rec) => {
-                            return rec.getCellValue(`${column}`);
-                        }).sort()];
+                                let nameColumn = table.fields.filter(field => field.description.includes('#NAME#'))[0];
+                                return {
+                                    email: rec.getCellValue(`${column}`),
+                                    name: rec.getCellValueAsString(nameColumn.id)
+                                };
+                            }).sort()];
                         const uniqueSet = new Set(newArray);
                         // console.log('uniqueSet.values()', uniqueSet.values());
                         const finalArray = [...uniqueSet.values()].map((each) => {
-                            return {value: each, label: each};
+                            return {label: `${each.name} (${each.email})`, id: each.email, name: each.name, email: each.email};
                         })
                         setOptions(finalArray);
                     }
                     const queryRecords = await table.selectRecordsAsync();
                     await queryRecords.loadDataAsync();
-                    records = queryRecords.records;
-                    if (records && records.length > 0) {
-                        records.filter((record) => {
-                            if (value) return record.getCellValue(`${xFieldId}`) === value;
+                    records = queryRecords ? queryRecords.records.filter((record) => {
+                            if (value && value.length > 0) return record.getCellValue(`${xFieldId}`) === value[0].email;
                             return record;
-                        });
-                        // console.log('setting state records');
-                        setStateRecords(records);
-                    }
+                        })
+                        : null;
+                    setStateRecords(records);
                     // console.log('records.length', records.length);
-                    if (value && records && records.length > 0) {
+                    if (value && value.length > 0 && records && records.length > 0) {
                         const exists = records.find((record) =>
                             record.getCellValue('Eval Type') === 'A'
-                            && record.getCellValue(`${xFieldId}`) === value);
+                            && record.getCellValue(`${xFieldId}`) === value[0].email);
                         // console.log('exists', exists);
                         handleSetEval(exists);
+                    } else {
+                        handleSetEval(null);
                     }
                 }
             }
         })();
-    }, [table, view, xFieldId, value]);
-
-    useEffect(() => {
-        (async () => {
-            if (table && initialEval && value) {
-                // set objectives fields
-                const ratingFields = table.fields.filter(field => field.type === 'rating' && field.name !== 'Sleep Quality' && field.description?.includes('OBJ'));
-                // console.log('ratingFields', ratingFields);
-                // anything over 4 stars
-                const patientObjectives = [];
-                for (const f of ratingFields) {
-                    const name = f.name;
-                    const value = initialEval.getCellValue(f.name);
-                    if (value >= 4) patientObjectives.push({name, value});
-                }
-                // console.log('patientObjectives', patientObjectives);
-                setObjectives(patientObjectives);
-            }
-        })();
-    }, [initialEval, value]);
-
-    // const data = records && xField ? getChartData({records, xField}) : null;
+    }, [table, xFieldId, value]);
 
     const selected = value;
-
-    const handleResetValues = {
-        resetTable: () => {
-            view = undefined;
-            xFieldId = undefined;
-            setValue(undefined);
-        },
-        resetView: () => {
-            xFieldId = null;
-            setValue(null);
-        },
-        resetField: () => {
-            setValue(null);
-        }
-    }
-
     const viewport = useViewport();
-
-    useSettingsButton(() => setShowSettings(!showSettings));
-
-    const Setup = () => {
-
-        return (
-            <Box padding={4} display="flex" alignContent="center" justifyContent="content" flexDirection="column">
-                <FormField label="Table">
-                    <TablePickerSynced
-                        globalConfigKey={GlobalConfigKeys.TABLE_ID}
-                        onChange={() => handleResetValues.resetTable()}
-                    />
-                </FormField>
-                {table && (
-                    <FormField label="View" paddingX={1}>
-                        <ViewPickerSynced
-                            table={table}
-                            globalConfigKey={GlobalConfigKeys.VIEW_ID}
-                            onChange={() => handleResetValues.resetView()}
-                        />
-                    </FormField>
-                )}
-                <Button variant="primary" onClick={() => setShowSettings(false)} disabled={!(!!table && !!view)}>Save</Button>
-            </Box>
-        );
-    }
-
-    if (showSettings) {
-        return <Setup/>
-    }
-
 
     return (
         <>
@@ -189,11 +127,10 @@ function Dashboard() {
                 display="flex"
                 flexDirection="column"
             >
-                <Settings table={table} xFieldValues={options} setFieldValue={setValue}
-                          handleResetValues={handleResetValues}/>
+                <Settings table={table} xFieldValues={options} setFieldValue={handleSetValue}
+                          value={value}/>
                 {selected && initialEval ? (
                     <>
-                        {/*<Box position="relative" flex="auto" padding={3}>*/}
                         <Box position="relative" flex="auto" flexWrap="wrap" padding={3}>
                             <div style={{display: "flex", maxWidth: viewport.width, flexWrap: "wrap"}}>
                                 <PatientInfo table={table} initialEval={initialEval}/>
@@ -210,21 +147,17 @@ function Dashboard() {
 
                             </div>
                             <div style={{display: "flex", maxWidth: viewport.width, flexWrap: "wrap"}}>
-
-                                <Objectives initialEval={initialEval} objectives={objectives}/>
-
+                                <Objectives table={table} initialEval={initialEval}/>
                             </div>
-
                         </Box>
                         <Box position="relative" flex="auto" padding={3}>
-                            <Charts table={table} records={stateRecords} />
+                            <Charts table={table} records={stateRecords}/>
                         </Box>
-                        {/*</Box>*/}
                     </>
-                ) : <DashboardTile><Heading>Não foi possível encontrar os dados do paciente...</Heading></DashboardTile>}
+                ) : <DashboardTile><Heading>Não foi possível encontrar os dados do
+                    paciente...</Heading></DashboardTile>}
             </Box>
         </>
-
     );
 }
 
@@ -318,7 +251,7 @@ const PatientInfo = ({table, initialEval}) => {
     return (
         <>{initialEval ?
             <DashboardTile>
-                <Label>GENERAL INFO</Label>
+                <Label>Informações Gerais</Label>
                 <table>
                     <tr>
                         <td><TableText>{name?.label || ''} </TableText></td>
@@ -357,8 +290,24 @@ const PatientInfo = ({table, initialEval}) => {
 
 const SpacedText = ({children, ...props}) => <Text padding={1} {...props}>{children}</Text>
 
-const Objectives = ({initialEval, objectives}) => {
-    // console.log('objectives', objectives);
+const Objectives = ({table, initialEval}) => {
+    const objectives = table.fields
+        .filter(field => {
+            const value = initialEval.getCellValue(field.name);
+            return field.type === 'rating' &&
+                // field.name !== 'Sleep Quality' &&
+                field.description?.includes('OBJ') &&
+                value >= 4;
+        })
+        .map(field => {
+            const name = field.name;
+            const value = initialEval.getCellValue(field.name);
+            return {
+                ...setLabel(field),
+                name,
+                value
+            }
+        });
     const renderObjectives = (objectives) => {
         return (
             <>
@@ -367,7 +316,7 @@ const Objectives = ({initialEval, objectives}) => {
                         {objectives.map(obj =>
                             <tr style={{display: "flex", justifyContent: "space-between", margin: 5, width: "100%"}}
                                 key={obj.name}>
-                                <td style={{margin: 5}}>{obj.name}</td>
+                                <td style={{margin: 5}}>{obj.label}</td>
                                 <td style={{margin: 5, alignSelf: "end", textAlign: "end"}}>
                                     <div>{Array(obj.value * 1).fill(true).map(o => <Icon name="star" size={24}/>)}</div>
                                 </td>
@@ -456,7 +405,7 @@ const NumericStats = ({table, initialEval, records}) => {
 }
 
 export const setLabel = (field, labelTag = "#LABEL#") => {
-    const labelTags = (field.description?.match(new RegExp(labelTag,"g")) || []).length;
+    const labelTags = (field.description?.match(new RegExp(labelTag, "g")) || []).length;
     let label;
     if (labelTags === 2) label = field.description?.split(`${labelTag}`)[1];
     if (!label || label?.trim() === '') label = field.name;
@@ -466,22 +415,22 @@ export const setLabel = (field, labelTag = "#LABEL#") => {
 const MedHistory = ({table, initialEval}) => {
 
     const medFields = table ? table.fields
-        .filter(field => {
-            return field.description?.includes("#MED#") && initialEval.getCellValueAsString(field.id) === 'Sim';
-        })
-        .map(field => {
-            return setLabel(field);
-        })
+            .filter(field => {
+                return field.description?.includes("#MED#") && initialEval.getCellValueAsString(field.id) === 'Sim';
+            })
+            .map(field => {
+                return setLabel(field);
+            })
         : null;
     const famFields = table ? table.fields
-        .filter(field => {
-            return field.description?.includes("#FAM#") && initialEval.getCellValueAsString(field.id) !== '';
-        })
-        .map(field => {
-            let fieldWithLabel = setLabel(field);
-            let value = initialEval.getCellValueAsString(field.id);
-            return {...fieldWithLabel, value};
-        })
+            .filter(field => {
+                return field.description?.includes("#FAM#") && initialEval.getCellValueAsString(field.id) !== '';
+            })
+            .map(field => {
+                let fieldWithLabel = setLabel(field);
+                let value = initialEval.getCellValueAsString(field.id);
+                return {...fieldWithLabel, value};
+            })
         : null;
     const cancerFields = table ? table.fields
             .filter(field => {
@@ -511,7 +460,7 @@ const MedHistory = ({table, initialEval}) => {
                     </Label>
                     {famFields && famFields.length > 0 ? famFields.map(field =>
                             <>
-                            <Text>{field.label} ({field.value})</Text>
+                                <Text>{field.label} ({field.value})</Text>
                             </>) :
                         <Text>Nenhum</Text>}
                 </Box>
@@ -533,7 +482,7 @@ const MedHistory = ({table, initialEval}) => {
 const HTag = ({label, renderIcon, key}) => <>
     <Box display="flex" alignItems="center" justifyContent="center" flexDirection="column" flexBasis="content"
          margin={3} padding={2} key={key}>
-        <Box >
+        <Box>
             {renderIcon}
         </Box>
         <Box>
@@ -544,48 +493,63 @@ const HTag = ({label, renderIcon, key}) => <>
 
 const HealthTags = ({table, initialEval}) => {
     const base = useBase();
-    const tagsTable = base.getTableByNameIfExists('TAGS');
-    let attachmentField = tagsTable ? tagsTable.fields.filter(field => field.description?.includes('#ATTACH#'))[0] : null;
-    // console.log('attachmentField', attachmentField);
-    const displayNameField = tagsTable ? tagsTable.fields.filter(field => field.description?.includes('#DISPLAY#'))[0] : null;
-    const tagsRecords = useRecords(tagsTable);
-    // console.log('tagsRecords', tagsRecords);
+
+    const tagsTable = base.tables.filter(table => table.description.includes('#TAGS#')) ? base.tables.filter(table => table.description.includes('#TAGS#'))[0] : null;
+
+    let attachmentField = tagsTable ? tagsTable.fields?.filter(field => field.description?.includes('#ATTACH#'))[0] : null;
+    const displayNameField = tagsTable ? tagsTable.fields?.filter(field => field.description?.includes('#DISPLAY#'))[0] : null;
+
+    const tagsRecords = tagsTable ? useRecords(tagsTable) : null;
+
     let patientTags = table && initialEval && table.fields.filter(field => field.description?.includes('#TAGS#')).length > 0 ?
         table.fields.filter(field => field.description?.includes('#TAGS#')).map(field => initialEval.getCellValue(field.id))[0] : null;
-    // if (patientTags?.length > 0) patientTags = patientTags[0].split(',');
-    console.log('patientTags', patientTags);
     const tags = patientTags?.length > 0 && tagsRecords?.length > 0 && attachmentField ?
 
-            patientTags.map(tag => {
-                console.log('tag', tag);
-                const record = tagsTable.selectRecords().getRecordById(tag.id);
-                const attachmentObj = record.getCellValue(attachmentField.id)[0];
-                const displayName = record.getCellValueAsString(displayNameField.id);
-                const clientUrl =
-                    record.getAttachmentClientUrlFromCellValueUrl(
-                        attachmentObj.id,
-                        attachmentObj.url
-                    );
+        patientTags.map(tag => {
+            // console.log('tag', tag);
+            const record = tagsTable.selectRecords().getRecordById(tag.id);
+            const displayName = record.getCellValueAsString(displayNameField.id);
+            const attachmentsExist = record.getCellValue(attachmentField.id);
+            if (!attachmentsExist) {
                 return {
                     ...record,
                     label: displayName,
-                    renderIcon: <img key={attachmentObj.id} src={clientUrl} width={36} alt={record.name} />
+                    renderIcon:
+                        <Box display="flex" justifyContent="center" alignContent="center"
+                             style={{backgroundColor: "#FBDEDE", height: 36, width: 36, borderRadius: 36}}>
+                            <span style={{color: "#EA5A5A", fontWeight: "bold", alignSelf: "center"}}>?</span>
+                        </Box>
                 }
-            })
+            }
+            const attachmentObj = record.getCellValue(attachmentField.id)[0];
+            const clientUrl =
+                record.getAttachmentClientUrlFromCellValueUrl(
+                    attachmentObj.id,
+                    attachmentObj.url
+                );
+            return {
+                ...record,
+                label: displayName,
+                renderIcon: <img key={attachmentObj.id} src={clientUrl} width={36} alt={record.name}/>
+            }
+        })
         : null;
 
     return (
         <>
             <DashboardTile>
                 <Label>TAGS DE SAÚDE / CONDIÇÃO</Label>
-                <div>
-                    <Box display="flex" flexWrap="wrap" maxWidth={300} style={{display: "flex", justifyContent: "space-evenly", marginTop: 12, flexWrap: "wrap"}}>
+                <div>{tagsTable ?
+                    <Box display="flex" flexWrap="wrap" maxWidth={300}
+                         style={{display: "flex", justifyContent: "space-evenly", marginTop: 12, flexWrap: "wrap"}}>
                         {tags && tags.length > 0 ? tags.map(tag =>
-                            // <div>
+                                // <div>
                                 <HTag label={tag.label} renderIcon={tag.renderIcon} key={tag.id}/>
                             // </div>
                         ) : <Text>Nenhum</Text>}
                     </Box>
+                    : <Heading>Cannot find TAGS table. Add #TAGS# to table description to ensure it can be
+                        found.</Heading>}
                 </div>
 
 
@@ -615,39 +579,69 @@ const FieldValueSelect = ({options, setFieldValue}) => {
     );
 }
 
-function Settings({table, xFieldValues, setFieldValue, handleResetValues}) {
-
+function Settings({table, xFieldValues, setFieldValue, value, handleResetValues}) {
+    console.log('xFieldValues', xFieldValues);
+    const ref = React.forwardRef(undefined);
     return (
         <Box display="flex" padding={3} borderBottom="thick" maxWidth={viewport.width}>
-            <FormField label="Tabela" width="25%" paddingRight={1} marginBottom={0}>
-                <TablePickerSynced
-                    globalConfigKey={GlobalConfigKeys.TABLE_ID}
-                    onChange={() => handleResetValues.resetTable()}
-                />
-            </FormField>
-            {table && (
-                <FormField label="Visão" width="25%" paddingX={1} marginBottom={0}>
-                    <ViewPickerSynced
-                        table={table}
-                        globalConfigKey={GlobalConfigKeys.VIEW_ID}
-                        onChange={() => handleResetValues.resetView()}
+            {table && xFieldValues && xFieldValues.length > 0 && (<>
+                <FormField label="Valor do filtro" paddingRight={1} marginBottom={0}>
+                    <Typeahead
+                        style={{borderColor: "black", borderWidth: 1}}
+                        ref={ref}
+                        options={xFieldValues}
+                        // minLength={2}
+                        highlightOnlyResult
+                        labelKey="label"
+                        onChange={(newValue) => {
+                            console.log('newValue', newValue);
+                            setFieldValue(newValue)
+                        }}
+                        id="react-bootstrap-typeahead"
+                        open={undefined}
+                        filterBy={['email', 'name']}
+                        flip
+                        selected={value}
+                        positionFixed={true}
+                        renderInput={({inputRef, referenceElementRef, ...inputProps}) => (
+                            <Input
+                                {...inputProps}
+                                ref={(input) => {
+                                    inputRef(input);
+                                    referenceElementRef(input);
+                                }}
+                            />
+                        )}
+                        renderMenu={(results, menuProps) => {
+                            if (!results.length) {
+                                return null;
+                            }
+                            console.log('results', results);
+                            return <div style={{borderColor: "black", borderWidth: 1}}><TypeaheadMenu options={results} labelKey="label" ref={ref}
+                                                  {...menuProps}
+                                                  renderMenuItemChildren={(option, { text }, index) => (
+                                                      <Fragment>
+                                                          <div style={{padding: 12, backgroundColor: "white"}}>
+                                                              <Highlighter search={text}>
+                                                                  {option.label}
+                                                              </Highlighter>
+                                                          </div>
+                                                      </Fragment>
+                                                  )}>
+                            </TypeaheadMenu>
+                            </div>
+                        }}
+
                     />
                 </FormField>
-            )}
-            {table && (
-                <FormField label="Filtrar por" width="25%" paddingX={1} marginBottom={0}>
-                    <FieldPickerSynced
-                        table={table}
-                        globalConfigKey={GlobalConfigKeys.X_FIELD_ID}
-                        // onChange={() => handleResetValues.resetField()}
-                        allowedTypes={[FieldType.EMAIL, FieldType.SINGLE_LINE_TEXT]}
-                    />
-                </FormField>
-            )}
-            {xFieldValues && xFieldValues.length > 0 && (
-                <FormField label="Valor do filtro" width="25%" paddingRight={1} marginBottom={0}>
-                    <FieldValueSelect maxWidth={50} width="25%" options={xFieldValues} setFieldValue={setFieldValue}/>
-                </FormField>
+                <Button alignSelf="flex-end"
+                        justifySelf="flex-end"
+                        marginBottom={0} onClick={() => {
+                            setFieldValue(null);
+                            ref.current.clear();
+                        }}
+                            >Limpar</Button>
+                </>
             )}
         </Box>
     );
