@@ -1,0 +1,1 @@
+IF(FIND('Nunca',{Eating out}), 0, IF(FIND('Uma vez por semana', {Eating out}), 1, IF(FIND('Entre duas ou três vezes por semana', {Eating out}), 2, IF({Eating out} = 'Mais três vezes por semana', 3, IF({Eating out} = 'Todos os dias', 4, 0)))))

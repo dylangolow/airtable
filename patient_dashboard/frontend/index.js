@@ -1,21 +1,23 @@
+import {loadCSSFromString, loadCSSFromURLAsync} from '@airtable/blocks/ui';
+loadCSSFromURLAsync('https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css')
 import {
     initializeBlock,
     useBase,
     useRecords,
-    useGlobalConfig,
     Box,
     FormField,
-    Select, Text, Label, Icon, useViewport, Heading, Button, Input
+    Text, Label, Icon, useViewport, Heading, Button, Input
 } from '@airtable/blocks/ui';
 import React, {Fragment, useEffect, useRef, useState} from 'react';
 import styled from 'styled-components';
-import {Highlighter, Typeahead, useItem} from 'react-bootstrap-typeahead';
+import {Highlighter, Typeahead} from 'react-bootstrap-typeahead';
 import moment from 'moment';
-import {viewport} from "@airtable/blocks";
+import {globalConfig, viewport} from "@airtable/blocks";
 import Charts from "./components/dashboard_charts";
 import {Menu} from "react-bootstrap-typeahead";
 import {MenuItem} from "react-bootstrap-typeahead";
 import {TypeaheadMenu} from "react-bootstrap-typeahead";
+import {getOptionProperty, getOptionLabel} from "react-bootstrap-typeahead/lib/utils";
 
 function Dashboard() {
     const base = useBase();
@@ -30,8 +32,8 @@ function Dashboard() {
     console.log('canFindInitialEval', canFindInitialEval);
     const returnError = (error) => {
         return (<Box display="flex" justifyContent="center" alignContent="center"
-             borderRadius="large" backgroundColor="lightGray"
-             margin={2} padding={3}>
+                     borderRadius="large" backgroundColor="lightGray"
+                     margin={2} padding={3}>
             <Heading>{error}</Heading>
         </Box>);
     }
@@ -86,7 +88,12 @@ function Dashboard() {
                         const uniqueSet = new Set(newArray);
                         // console.log('uniqueSet.values()', uniqueSet.values());
                         const finalArray = [...uniqueSet.values()].map((each) => {
-                            return {label: `${each.name} (${each.email})`, id: each.email, name: each.name, email: each.email};
+                            return {
+                                label: `${each.name} (${each.email})`,
+                                id: each.email,
+                                name: each.name,
+                                email: each.email
+                            };
                         })
                         setOptions(finalArray);
                     }
@@ -131,8 +138,8 @@ function Dashboard() {
                           value={value}/>
                 {selected && initialEval ? (
                     <>
-                        <Box position="relative" flex="auto" flexWrap="wrap" padding={3}>
-                            <div style={{display: "flex", maxWidth: viewport.width, flexWrap: "wrap"}}>
+                        <Box position="relative" display="flex" flex="auto" flexWrap="wrap" padding={3}>
+                            {/*<div style={{display: "flex", maxWidth: viewport.width, flexWrap: "wrap"}}>*/}
                                 <PatientInfo table={table} initialEval={initialEval}/>
                                 <div style={{
                                     display: "flex",
@@ -142,13 +149,14 @@ function Dashboard() {
                                 }}>
                                     <NumericStats table={table} initialEval={initialEval} records={stateRecords}/>
                                     <MedHistory table={table} initialEval={initialEval}/>
-                                    <HealthTags table={table} initialEval={initialEval}/>
-                                </div>
 
-                            </div>
-                            <div style={{display: "flex", maxWidth: viewport.width, flexWrap: "wrap"}}>
-                                <Objectives table={table} initialEval={initialEval}/>
-                            </div>
+                                </div>
+                            <HealthTags style={{height: "fit-content"}} table={table} initialEval={initialEval}/>
+
+                            {/*</div>*/}
+                            {/*<div style={{display: "flex", maxWidth: viewport.width, flexWrap: "wrap"}}>*/}
+                                <Objectives style={{height: "fit-content"}} table={table} initialEval={initialEval}/>
+                            {/*</div>*/}
                         </Box>
                         <Box position="relative" flex="auto" padding={3}>
                             <Charts table={table} records={stateRecords}/>
@@ -250,7 +258,7 @@ const PatientInfo = ({table, initialEval}) => {
 
     return (
         <>{initialEval ?
-            <DashboardTile>
+            <DashboardTile height={"fit-content"} width={"fit-content"} >
                 <Label>Informações Gerais</Label>
                 <table>
                     <tr>
@@ -337,8 +345,9 @@ const Objectives = ({table, initialEval}) => {
                 padding={3}
                 borderRadius="large"
                 backgroundColor="lightGray1"
-                minWidth={400}
-                maxWidth={600}
+                minWidth={300}
+                maxWidth={400}
+                height={"fit-content"}
             >
                 <Label>OBJETIVOS</Label>
                 {renderObjectives(objectives)}
@@ -387,7 +396,7 @@ const NumericStats = ({table, initialEval, records}) => {
     ];
 
     return (
-        <>
+        <div>
             <DashboardTile>
                 <div style={{display: "flex", justifyContent: "space-evenly"}}>
                     {values && values.map(each =>
@@ -400,7 +409,7 @@ const NumericStats = ({table, initialEval, records}) => {
                     )}
                 </div>
             </DashboardTile>
-        </>
+        </div>
     );
 }
 
@@ -444,7 +453,7 @@ const MedHistory = ({table, initialEval}) => {
         : null;
 
     return (
-        <>
+        <div>
             <DashboardTile>
                 <Box padding={1} marginBottom={2}>
                     <Label>
@@ -475,7 +484,7 @@ const MedHistory = ({table, initialEval}) => {
                         <Text>Nenhum</Text>}
                 </Box>
             </DashboardTile>
-        </>
+        </div>
     );
 }
 
@@ -504,24 +513,24 @@ const HealthTags = ({table, initialEval}) => {
     let patientTags = table && initialEval && table.fields.filter(field => field.description?.includes('#TAGS#')).length > 0 ?
         table.fields.filter(field => field.description?.includes('#TAGS#')).map(field => initialEval.getCellValue(field.id))[0] : null;
     const tags = patientTags?.length > 0 && tagsRecords?.length > 0 && attachmentField ?
-
         patientTags.map(tag => {
-            // console.log('tag', tag);
             const record = tagsTable.selectRecords().getRecordById(tag.id);
             const displayName = record.getCellValueAsString(displayNameField.id);
-            const attachmentsExist = record.getCellValue(attachmentField.id);
+            let attachmentsExist = record.getCellValue(attachmentField.id) ? record.getCellValue(attachmentField.id)[0] : null;
+            const defaultExists = tagsRecords.find(record => record.getCellValueAsString('Tag') === 'DEFAULT');
+            console.log('defaultExists', defaultExists);
+            if (!attachmentsExist && defaultExists) attachmentsExist = defaultExists.getCellValue(attachmentField.id) ? defaultExists.getCellValue(attachmentField.id)[0] : null;
             if (!attachmentsExist) {
                 return {
                     ...record,
                     label: displayName,
-                    renderIcon:
-                        <Box display="flex" justifyContent="center" alignContent="center"
-                             style={{backgroundColor: "#FBDEDE", height: 36, width: 36, borderRadius: 36}}>
-                            <span style={{color: "#EA5A5A", fontWeight: "bold", alignSelf: "center"}}>?</span>
-                        </Box>
+                    renderIcon: <Box display="flex" justifyContent="center" alignContent="center"
+                                     style={{backgroundColor: "#FBDEDE", height: 36, width: 36, borderRadius: 36}}>
+                        <span style={{color: "#EA5A5A", fontWeight: "bold", alignSelf: "center"}}>?</span>
+                    </Box>
                 }
             }
-            const attachmentObj = record.getCellValue(attachmentField.id)[0];
+            const attachmentObj = attachmentsExist;
             const clientUrl =
                 record.getAttachmentClientUrlFromCellValueUrl(
                     attachmentObj.id,
@@ -537,110 +546,181 @@ const HealthTags = ({table, initialEval}) => {
 
     return (
         <>
-            <DashboardTile>
+            <DashboardTile height={"fit-content"} width={"fit-content"}>
                 <Label>TAGS DE SAÚDE / CONDIÇÃO</Label>
                 <div>{tagsTable ?
                     <Box display="flex" flexWrap="wrap" maxWidth={300}
                          style={{display: "flex", justifyContent: "space-evenly", marginTop: 12, flexWrap: "wrap"}}>
                         {tags && tags.length > 0 ? tags.map(tag =>
-                                // <div>
                                 <HTag label={tag.label} renderIcon={tag.renderIcon} key={tag.id}/>
-                            // </div>
                         ) : <Text>Nenhum</Text>}
                     </Box>
                     : <Heading>Cannot find TAGS table. Add #TAGS# to table description to ensure it can be
                         found.</Heading>}
                 </div>
-
-
             </DashboardTile>
         </>
     );
 }
 
-const FieldValueSelect = ({options, setFieldValue}) => {
-    const [value, setValue] = useState(null);
+function Settings({table, xFieldValues, setFieldValue, value}) {
 
-    useEffect(() => {
-        setFieldValue(value);
-    }, [value]);
-
-    return (
-        <>
-            {(options && options.length > 0) ? (<Select
-                options={options}
-                value={value}
-                onChange={newValue => setValue(newValue)}
-                width="320px"
-            />) : <Text>No filter options available</Text>
-            }
-        </>
-
-    );
-}
-
-function Settings({table, xFieldValues, setFieldValue, value, handleResetValues}) {
-    console.log('xFieldValues', xFieldValues);
     const ref = React.forwardRef(undefined);
+
+    const changeBackground = (e) => {
+        e.target.style.background = '#F0F0F0';
+    }
+    const revertBackground = (e) => {
+        e.target.style.background = 'white'
+    }
+
+    const TypeaheadMenu = (props) => {
+        const {
+            labelKey,
+            newSelectionPrefix,
+            options,
+            paginationText,
+            renderMenuItemChildren,
+            text,
+            ...menuProps
+        } = props;
+
+        const renderMenuItem = (option, position) => {
+            const label = getOptionLabel(option, labelKey);
+
+            const menuItemProps = {
+                disabled: getOptionProperty(option, 'disabled'),
+                label,
+                option,
+                position,
+            };
+
+            // if (option.customOption) {
+            //     return (
+            //         <MenuItem
+            //             {...menuItemProps}
+            //             key={position}
+            //             label={label}>
+            //             {newSelectionPrefix}
+            //             <Highlighter search={text} className={"rbt-highlight-text"} style={{fontWeight: 'bold'}}>
+            //                 {label}
+            //             </Highlighter>
+            //         </MenuItem>
+            //     );
+            // }
+
+            if (option.paginationOption) {
+                return (
+                    <Fragment key="pagination-item">
+                        <div style={{width: "100%", marginTop: 8, display: "flex", flexDirection: "column"}}
+                             onMouseEnter={changeBackground} onMouseLeave={revertBackground}>
+                            <MenuItem
+                                {...menuItemProps}
+                                className="rbt-menu-pagination-option"
+                                style={{
+                                    color: '#2D2D2D',
+                                    textTransform: 'none',
+                                    width: "100%",
+                                    textAlign: 'center',
+                                    borderTopColor: 'lightGrey',
+                                    borderTopWidth: 1,
+                                    borderTopStyle: 'solid',
+                                    paddingTop: 4,
+                                    paddingBottom: 4
+                                }}
+                                label={paginationText}>
+                                {paginationText}
+                            </MenuItem>
+                        </div>
+                    </Fragment>
+                );
+            }
+
+            return (
+                <MenuItem {...menuItemProps} key={position} onMouseEnter={changeBackground}
+                          onMouseLeave={revertBackground}>
+                    {renderMenuItemChildren(option, props, position)}
+                </MenuItem>
+            );
+        };
+
+        return (
+            // Explictly pass `text` so Flow doesn't complain...
+            <Menu {...menuProps} text={text}>
+                {options.map(renderMenuItem)}
+            </Menu>
+        );
+    };
+    // console.log('xFieldValues', xFieldValues);
+
+    loadCSSFromString('a, a:hover, a:focus {text-decoration: none; color: #2D2D2D;}');
+    loadCSSFromString('mark { padding: 0; font-weight: bold; background: transparent; }')
     return (
         <Box display="flex" padding={3} borderBottom="thick" maxWidth={viewport.width}>
             {table && xFieldValues && xFieldValues.length > 0 && (<>
-                <FormField label="Valor do filtro" paddingRight={1} marginBottom={0}>
-                    <Typeahead
-                        style={{borderColor: "black", borderWidth: 1}}
-                        ref={ref}
-                        options={xFieldValues}
-                        // minLength={2}
-                        highlightOnlyResult
-                        labelKey="label"
-                        onChange={(newValue) => {
-                            console.log('newValue', newValue);
-                            setFieldValue(newValue)
-                        }}
-                        id="react-bootstrap-typeahead"
-                        open={undefined}
-                        filterBy={['email', 'name']}
-                        flip
-                        selected={value}
-                        positionFixed={true}
-                        renderInput={({inputRef, referenceElementRef, ...inputProps}) => (
-                            <Input
-                                {...inputProps}
-                                ref={(input) => {
-                                    inputRef(input);
-                                    referenceElementRef(input);
-                                }}
-                            />
-                        )}
-                        renderMenu={(results, menuProps) => {
-                            if (!results.length) {
-                                return null;
-                            }
-                            console.log('results', results);
-                            return <div style={{borderColor: "black", borderWidth: 1}}><TypeaheadMenu options={results} labelKey="label" ref={ref}
-                                                  {...menuProps}
-                                                  renderMenuItemChildren={(option, { text }, index) => (
-                                                      <Fragment>
-                                                          <div style={{padding: 12, backgroundColor: "white"}}>
-                                                              <Highlighter search={text}>
-                                                                  {option.label}
-                                                              </Highlighter>
-                                                          </div>
-                                                      </Fragment>
-                                                  )}>
-                            </TypeaheadMenu>
-                            </div>
-                        }}
+                    <FormField label="Valor do filtro" paddingRight={1} marginBottom={0}>
+                        <Typeahead
+                            ref={ref}
+                            options={xFieldValues}
+                            onChange={(newValue) => {
+                                console.log('newValue', newValue);
+                                globalConfig.setAsync('xFieldId', newValue);
+                                setFieldValue(newValue)
+                            }}
+                            id="react-bootstrap-typeahead"
+                            open={undefined}
+                            selected={globalConfig.get('xPatientEmail')}
+                            renderInput={({inputRef, referenceElementRef, ...inputProps}) => (
+                                <Input
+                                    {...inputProps}
+                                    ref={(input) => {
+                                        inputRef(input);
+                                        referenceElementRef(input);
+                                    }}
+                                />
+                            )}
+                            maxResults={2}
+                            placeholder={"Encontre um paciente..."}
+                            paginationText={"          Exibir resultados adicionais..."}
+                            renderMenu={(results, menuProps) => {
+                                if (!results.length) {
+                                    return null;
+                                }
+                                return <div style={{padding: 0}}>
+                                    <TypeaheadMenu
+                                        options={results}
+                                        labelKey="label"
+                                        ref={ref}
+                                        justify={"left"}
+                                        paginate
+                                        filterBy={['email', 'name']}
+                                        flip
+                                        text={ref.current.state.text}
+                                        maxResults={50}
+                                        {...menuProps}
+                                        renderMenuItemChildren={(option, props, index) => (
+                                            <Fragment>
+                                                <div style={{padding: 12, backgroundColor: "white"}} >
+                                                    <Highlighter search={props.text} style={{fontWeight: 'bold'}}>
+                                                        {option[props.labelKey]}
+                                                    </Highlighter>
 
-                    />
-                </FormField>
-                <Button alignSelf="flex-end"
-                        justifySelf="flex-end"
-                        marginBottom={0} onClick={() => {
-                            setFieldValue(null);
-                            ref.current.clear();
-                        }}
-                            >Limpar</Button>
+                                                </div>
+                                            </Fragment>
+                                        )}>
+                                    </TypeaheadMenu>
+                                </div>
+                            }}
+
+                        />
+                    </FormField>
+                    <Button alignSelf="flex-end"
+                            justifySelf="flex-end"
+                            marginBottom={0} onClick={() => {
+                        setFieldValue(null);
+                        ref.current.clear();
+                    }}
+                    >Limpar</Button>
                 </>
             )}
         </Box>

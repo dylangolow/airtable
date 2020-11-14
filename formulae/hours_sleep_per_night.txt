@@ -1,0 +1,1 @@
+IF(FIND('Menos de 5',{Hours sleep per night}), 4, IF({Hours sleep per night}='5', 5, IF('6' = {Hours sleep per night}, 6, IF({Hours sleep per night} = '7', 7, IF({Hours sleep per night} = '8', 8, IF({Hours sleep per night} = '9', 9, 0))))))

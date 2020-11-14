@@ -1,0 +1,1 @@
+IF(FIND('Não sei',{Alcohol intake}), 0, IF(FIND('Raramente (menos de 1x por semana, eventualmente)', {Alcohol intake}), 1, IF(FIND('Eventualmente (2x ou menos por semana; finais de semana)', {Alcohol intake}), 2, IF({Alcohol intake} = 'Frequente (cerca de 3x por semana)', 3, IF({Alcohol intake} = 'Muito frequente, quase todos os dias', 4, 0)))))

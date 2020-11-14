@@ -1,5 +1,4 @@
 import {
-    initializeBlock,
     useBase,
     useRecords,
     useGlobalConfig,
@@ -10,10 +9,6 @@ import {
     FormField,
 } from '@airtable/blocks/ui';
 import React from 'react';
-
-// This app uses chart.js and the react-chartjs-2 packages.
-// Install them by running this in the terminal:
-// npm install chart.js react-chartjs-2
 import {Bar} from 'react-chartjs-2';
 
 const GlobalConfigKeys = {

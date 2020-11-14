@@ -22,7 +22,7 @@ function getCharts({table, records, initialEval}) {
     }
 
     return (
-        <><Box style={{margin: 20}} display="flex" flexWrap="wrap">
+        <><Box margin={0} display="flex" flexWrap="wrap">
             {charts && charts.length > 0 ?
                 charts.map((chart) => <SingleChart id={chart.id} table={table} records={records} deleteTable={handleDeleteTable} />)
                 : null}
