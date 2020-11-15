@@ -9,7 +9,6 @@ const Objectives = ({table, initialEval}) => {
         .filter(field => {
             const value = initialEval.getCellValue(field.name);
             return field.type === 'rating' &&
-                // field.name !== 'Sleep Quality' &&
                 field.description?.includes('OBJ') &&
                 value >= 4;
         })
@@ -27,14 +26,17 @@ const Objectives = ({table, initialEval}) => {
             <>
                 {objectives && objectives.length > 0 ?
                     <table style={{width: "100%"}}>
+                        <tbody>
                         {objectives.map(obj =>
                             <tr style={{display: "flex", justifyContent: "space-between", margin: 5, width: "100%"}}
                                 key={obj.name}>
                                 <td style={{margin: 5}}>{obj.label}</td>
                                 <td style={{margin: 5, alignSelf: "end", textAlign: "end"}}>
-                                    <div>{Array(obj.value * 1).fill(true).map((o, index) => <Icon key={`${obj.name}-star-${index}`} name="star" size={24}/>)}</div>
+                                    <div>{Array(obj.value * 1).fill(true).map((o, index) => <Icon
+                                        key={`${obj.name}-star-${index}`} name="star" size={24}/>)}</div>
                                 </td>
                             </tr>)}
+                        </tbody>
                     </table>
                     :
                     <NoEvalTile/>

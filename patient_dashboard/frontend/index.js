@@ -1,31 +1,30 @@
-import {InputSynced, loadCSSFromString, loadCSSFromURLAsync, useGlobalConfig} from '@airtable/blocks/ui';
 import {
-    initializeBlock,
-    useBase,
-    useRecords,
     Box,
+    Button,
     FormField,
-    Text, Label, Icon, useViewport, Heading, Button, Input
+    Heading,
+    initializeBlock,
+    InputSynced,
+    loadCSSFromString,
+    loadCSSFromURLAsync,
+    useBase,
+    useGlobalConfig,
+    useViewport
 } from '@airtable/blocks/ui';
 import {DashboardTile} from "./components/dashboard_components/DashboardTile";
 import NumericStats from "./components/dashboard_components/NumericStats";
 
-import React, {Fragment, useEffect, useRef, useState} from 'react';
-import styled from 'styled-components';
-import {Highlighter, Typeahead} from 'react-bootstrap-typeahead';
-import moment from 'moment';
+import React, {Fragment, useEffect, useState} from 'react';
+import {Highlighter, Menu, MenuItem, Typeahead} from 'react-bootstrap-typeahead';
 import {globalConfig, viewport} from "@airtable/blocks";
 import Charts from "./components/dashboard_charts";
-import {Menu} from "react-bootstrap-typeahead";
-import {MenuItem} from "react-bootstrap-typeahead";
-import {getOptionProperty, getOptionLabel} from "react-bootstrap-typeahead/lib/utils";
-import {setLabel, sortByField} from "./utils";
+import {getOptionLabel, getOptionProperty} from "react-bootstrap-typeahead/lib/utils";
 import PatientInfo from "./components/dashboard_components/PatientInfo";
 import MedHistory from "./components/dashboard_components/MedHistory";
 import HealthTags from "./components/dashboard_components/HealthTags";
 import Objectives from "./components/dashboard_components/Objectives";
 
-loadCSSFromURLAsync('https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css')
+loadCSSFromURLAsync('https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css'); // required for typeahead styling
 
 export const GlobalConfigKeys = {
     TABLE_ID_EVALS: 'tableIdEvals',
@@ -38,11 +37,12 @@ export const GlobalConfigKeys = {
 };
 
 function Dashboard() {
+
     const base = useBase();
     const globalConfig = useGlobalConfig();
     const viewport = useViewport();
 
-    const [options, setOptions] = useState([]); //
+    const [options, setOptions] = useState([]); // typeahead options
     const [value, setValue] = useState(null); // patient email value to filter records
     const [initialEval, setInitialEval] = useState(null); // initial eval record for patient email
     const [stateRecords, setStateRecords] = useState([]); // record filtered to patient email
@@ -81,12 +81,10 @@ function Dashboard() {
         table.fields.filter(field => field.description.includes('#EMAIL#'))[0].id : null;
 
     const handleSetEval = (value) => {
-        console.log('handleSetEval value', value);
         setInitialEval(value);
     }
 
     const handleSetValue = (value) => {
-        console.log('handleSetValue value', value);
         setValue(value);
     }
 
@@ -121,8 +119,6 @@ function Dashboard() {
         const queryRecords = await table.selectRecordsAsync();
         await queryRecords.loadDataAsync();
         records = queryRecords.records ? [...queryRecords.records].filter((record) => {
-                console.log('value', value);
-                console.log('patientEmail', patientEmail);
                 if (patientEmail) return record.getCellValue(`${xFieldId}`) === patientEmail;
                 return record;
             })
@@ -137,15 +133,11 @@ function Dashboard() {
         } else {
             handleSetEval(null);
         }
-        console.log('initialEval', initialEval);
     }
 
     const handleSetValueInEffect = async () => {
         if (patientEmail) {
-            console.log('patientEmail lower', patientEmail);
-            console.log('patientEmail lower options', options);
             const newSelectedValue = options.find(each => {
-                console.log('each', each);
                 return each.email === patientEmail
             })
             if (newSelectedValue) {
@@ -155,32 +147,28 @@ function Dashboard() {
     }
 
     useEffect(() => {
-            (async () => {
-                await handleSetOptions();
-            })();
-        }, []);
+        (async () => {
+            await handleSetOptions();
+        })();
+    }, []);
 
     useEffect(() => {
         (async () => {
             if (table && initialEvalView) {
                 if (xFieldId && !table.getFieldByIdIfExists(xFieldId)) xFieldId = null;
-                console.log('xFieldId', xFieldId);
-                    await handleSetOptions();
-                    await setEvalInEffect();
-                }
-            console.log('triggered useEffect table, xFieldId, value')
+                await handleSetOptions();
+                await setEvalInEffect();
+            }
         })();
     }, [value]);
 
     useEffect(() => {
-            (async () => {
-                await handleSetValueInEffect();
-                await handleSetOptions();
-                await setEvalInEffect();
-            })();
-        }, [initialEval]);
-
-    console.log('value', value);
+        (async () => {
+            await handleSetValueInEffect();
+            await handleSetOptions();
+            await setEvalInEffect();
+        })();
+    }, [initialEval]);
 
     return (
         <>
@@ -193,9 +181,7 @@ function Dashboard() {
                 display="flex"
                 flexDirection="column"
             >
-                {console.log('options on dashboard for typeahead', options)}
-
-                <Settings table={table} xFieldValues={options} setFieldValue={handleSetValue} value={value}/>
+                <Settings table={table} xFieldValues={options} setFieldValue={handleSetValue} />
 
                 {value && initialEval && options && options.length > 0 ? (
                     <>
@@ -224,7 +210,7 @@ function Dashboard() {
     );
 }
 
-function Settings({table, xFieldValues, setFieldValue, value}) {
+function Settings({table, xFieldValues, setFieldValue}) {
 
     const ref = React.createRef();
 
@@ -248,7 +234,6 @@ function Settings({table, xFieldValues, setFieldValue, value}) {
 
 
         const renderMenuItem = (option, position) => {
-            console.log('option', option);
             if (option === undefined) return;
             const label = getOptionLabel(option, labelKey);
 
@@ -258,20 +243,6 @@ function Settings({table, xFieldValues, setFieldValue, value}) {
                 option,
                 position,
             };
-
-            // if (option.customOption) {
-            //     return (
-            //         <MenuItem
-            //             {...menuItemProps}
-            //             key={position}
-            //             label={label}>
-            //             {newSelectionPrefix}
-            //             <Highlighter search={text} className={"rbt-highlight-text"} style={{fontWeight: 'bold'}}>
-            //                 {label}
-            //             </Highlighter>
-            //         </MenuItem>
-            //     );
-            // }
 
             if (option && option.paginationOption) {
                 return (
@@ -309,13 +280,11 @@ function Settings({table, xFieldValues, setFieldValue, value}) {
         };
 
         return (
-            // Explictly pass `text` so Flow doesn't complain...
             <Menu {...menuProps} text={text}>
                 {options.map(renderMenuItem)}
             </Menu>
         );
     };
-    // console.log('xFieldValues', xFieldValues);
 
     loadCSSFromString('a, a:hover, a:focus {text-decoration: none; color: #2D2D2D;}');
     loadCSSFromString('mark { padding: 0; font-weight: bold; background: transparent; }')
@@ -327,16 +296,20 @@ function Settings({table, xFieldValues, setFieldValue, value}) {
                             ref={ref}
                             options={xFieldValues}
                             onChange={(newValue) => {
-                                console.log('newValue', newValue);
-                                globalConfig.setAsync(GlobalConfigKeys.X_PATIENT_EMAIL, newValue[0].email);
-                                globalConfig.setAsync(GlobalConfigKeys.X_TYPEAHEAD_VALUE, newValue[0].label);
+                                if (newValue && newValue.length > 0) {
+                                    globalConfig.setAsync(GlobalConfigKeys.X_PATIENT_EMAIL, newValue[0].email);
+                                    globalConfig.setAsync(GlobalConfigKeys.X_TYPEAHEAD_VALUE, newValue[0].label);
+                                } else {
+                                    globalConfig.setAsync(GlobalConfigKeys.X_PATIENT_EMAIL, undefined);
+                                    globalConfig.setAsync(GlobalConfigKeys.X_TYPEAHEAD_VALUE, undefined);
+                                }
                                 globalConfig.setAsync(GlobalConfigKeys.X_SELECTED_VALUE, JSON.stringify(newValue));
                                 setFieldValue(newValue)
                             }}
                             id="react-bootstrap-typeahead"
                             open={undefined}
                             selected={xFieldValues.find(x => x.email === globalConfig.get(GlobalConfigKeys.X_PATIENT_EMAIL)) ?
-                                    [xFieldValues.find(x => x.email === globalConfig.get(GlobalConfigKeys.X_PATIENT_EMAIL))] : null}
+                                [xFieldValues.find(x => x.email === globalConfig.get(GlobalConfigKeys.X_PATIENT_EMAIL))] : null}
                             renderInput={({inputRef, referenceElementRef, ...inputProps}) => (
                                 <InputSynced
                                     globalConfigKey={GlobalConfigKeys.X_TYPEAHEAD_VALUE}
@@ -347,26 +320,21 @@ function Settings({table, xFieldValues, setFieldValue, value}) {
                                     }}
                                 />
                             )}
-                            maxResults={2}
+                            maxResults={20}
                             placeholder={"Encontre um paciente..."}
                             paginationText={"Exibir resultados adicionais..."}
                             renderMenu={(results, menuProps) => {
-                                console.log('results', results);
                                 if (!results.length) {
                                     return null;
                                 }
                                 return <div style={{padding: 0}}>
-                                    {console.log('in typeahead results', results)}
                                     <TypeaheadMenu
                                         options={results}
                                         labelKey="label"
-                                        // ref={ref}
                                         paginate
                                         filterBy={['email', 'name']}
                                         flip
-                                        // text={ref.current.state.text}
                                         text={globalConfig.get(GlobalConfigKeys.X_TYPEAHEAD_VALUE)}
-                                        maxResults={50}
                                         {...menuProps}
                                         renderMenuItemChildren={(option, props, index) => (
                                             <Fragment>
@@ -381,18 +349,18 @@ function Settings({table, xFieldValues, setFieldValue, value}) {
                                     </TypeaheadMenu>
                                 </div>
                             }}
-
                         />
                     </FormField>
                     <Button alignSelf="flex-end"
                             justifySelf="flex-end"
-                            marginBottom={0} onClick={() => {
-                        globalConfig.setAsync(GlobalConfigKeys.X_TYPEAHEAD_VALUE, undefined);
-                        globalConfig.setAsync(GlobalConfigKeys.X_PATIENT_EMAIL, undefined);
-                        globalConfig.setAsync(GlobalConfigKeys.X_SELECTED_VALUE, undefined);
-                        setFieldValue(null);
-                        ref.current.clear();
-                    }}
+                            marginBottom={0}
+                            onClick={() => {
+                                globalConfig.setAsync(GlobalConfigKeys.X_TYPEAHEAD_VALUE, undefined);
+                                globalConfig.setAsync(GlobalConfigKeys.X_PATIENT_EMAIL, undefined);
+                                globalConfig.setAsync(GlobalConfigKeys.X_SELECTED_VALUE, undefined);
+                                setFieldValue(null);
+                                ref.current.clear();
+                            }}
                     >Limpar</Button>
                 </>
             )}

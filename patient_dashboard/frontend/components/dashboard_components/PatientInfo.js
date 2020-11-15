@@ -59,6 +59,7 @@ const PatientInfo = ({table, initialEval}) => {
             <DashboardTile height={"fit-content"} width={"fit-content"}>
                 <Label>Informações Gerais</Label>
                 <table>
+                    <tbody>
                     <tr>
                         <td><TableText>{name?.label || ''} </TableText></td>
                         <td><TableText>{name?.value || ''}</TableText></td>
@@ -87,6 +88,7 @@ const PatientInfo = ({table, initialEval}) => {
                         <td><TableText>{phone?.label || ''}</TableText></td>
                         <td><TableText>{phone?.value || ''}</TableText></td>
                     </tr>
+                    </tbody>
                 </table>
             </DashboardTile> : <NoEvalTile/>
         }

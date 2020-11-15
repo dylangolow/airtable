@@ -4,7 +4,7 @@ import {DashboardTile} from "./DashboardTile";
 
 const HTag = ({label, renderIcon}) => <>
     <Box display="flex" alignItems="center" justifyContent="center" flexDirection="column" flexBasis="content"
-         margin={3} padding={2}>
+         marginLeft={3} marginRight={3} padding={2}>
         <Box>
             {renderIcon}
         </Box>
