@@ -1,6 +1,4 @@
 import {InputSynced, loadCSSFromString, loadCSSFromURLAsync, useGlobalConfig} from '@airtable/blocks/ui';
-
-loadCSSFromURLAsync('https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css')
 import {
     initializeBlock,
     useBase,
@@ -9,6 +7,9 @@ import {
     FormField,
     Text, Label, Icon, useViewport, Heading, Button, Input
 } from '@airtable/blocks/ui';
+import {DashboardTile} from "./components/dashboard_components/DashboardTile";
+import NumericStats from "./components/dashboard_components/NumericStats";
+
 import React, {Fragment, useEffect, useRef, useState} from 'react';
 import styled from 'styled-components';
 import {Highlighter, Typeahead} from 'react-bootstrap-typeahead';
@@ -17,8 +18,14 @@ import {globalConfig, viewport} from "@airtable/blocks";
 import Charts from "./components/dashboard_charts";
 import {Menu} from "react-bootstrap-typeahead";
 import {MenuItem} from "react-bootstrap-typeahead";
-// import {TypeaheadMenu} from "react-bootstrap-typeahead";
 import {getOptionProperty, getOptionLabel} from "react-bootstrap-typeahead/lib/utils";
+import {setLabel, sortByField} from "./utils";
+import PatientInfo from "./components/dashboard_components/PatientInfo";
+import MedHistory from "./components/dashboard_components/MedHistory";
+import HealthTags from "./components/dashboard_components/HealthTags";
+import Objectives from "./components/dashboard_components/Objectives";
+
+loadCSSFromURLAsync('https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css')
 
 export const GlobalConfigKeys = {
     TABLE_ID_EVALS: 'tableIdEvals',
@@ -33,22 +40,24 @@ export const GlobalConfigKeys = {
 function Dashboard() {
     const base = useBase();
     const globalConfig = useGlobalConfig();
+    const viewport = useViewport();
+
+    const [options, setOptions] = useState([]); //
+    const [value, setValue] = useState(null); // patient email value to filter records
+    const [initialEval, setInitialEval] = useState(null); // initial eval record for patient email
+    const [stateRecords, setStateRecords] = useState([]); // record filtered to patient email
 
     let table; // EVALUATIONS - #EVALS# tag
-    let viewInitial;
     let records;
     let tableId = globalConfig.get(GlobalConfigKeys.TABLE_ID_EVALS);
+    let patientEmail = globalConfig.get(GlobalConfigKeys.X_PATIENT_EMAIL);
+
     table = base.getTableByIdIfExists(tableId) || base.tables.filter(table => table.description.includes('#EVALS#')) ?
         base.tables.filter(table => table.description.includes('#EVALS#'))[0] : null;
 
-    // table = base && base.tables.filter(table => table.description.includes('#EVALS#')) ?
-    //     base.tables.filter(table => table.description.includes('#EVALS#'))[0] : null;
-    console.log('evalTableExists', table);
-    // globalConfig.setAsync(GlobalConfigKeys.TABLE_ID_EVALS, table.id);
-
     const canFindInitialEval = table && table.fields.filter(field => field.name === "Eval Type") &&
         table.fields.filter(field => field.name === "Eval Type").length > 0;
-    console.log('canFindInitialEval', canFindInitialEval);
+
     const returnError = (error) => {
         return (<Box display="flex" justifyContent="center" alignContent="center"
                      borderRadius="large" backgroundColor="lightGray"
@@ -62,7 +71,7 @@ function Dashboard() {
             'Table is missing column "Eval Type" to identify initial evaluation. Ensure the proper table has the #EVALS# tag.'
         return (returnError(error));
     }
-    const initialEvalView = table.getViewByNameIfExists('#INITIAL#')
+    const initialEvalView = table.getViewByNameIfExists('#INITIAL#');
 
     if (!initialEvalView) {
         return (returnError('Table is missing view with name #INITIAL# filtered to only the Initial Evaluations.'));
@@ -70,13 +79,6 @@ function Dashboard() {
 
     let xFieldId = table && table.fields.filter(field => field.description.includes('#EMAIL#')).length > 0 ?
         table.fields.filter(field => field.description.includes('#EMAIL#'))[0].id : null;
-
-    console.log('xFieldId', xFieldId);
-
-    const [options, setOptions] = useState([]); //
-    const [value, setValue] = useState(null); // patient email value to filter records
-    const [initialEval, setInitialEval] = useState(null); // initial eval record for patient email
-    const [stateRecords, setStateRecords] = useState([]); // record filtered to patient email
 
     const handleSetEval = (value) => {
         console.log('handleSetEval value', value);
@@ -88,225 +90,57 @@ function Dashboard() {
         setValue(value);
     }
 
-    // initialEvalView && (async () => {
-    //     const queryValues = await initialEvalView.selectRecordsAsync();
-    //     await queryValues.loadDataAsync();
-    //     if (queryValues.records && queryValues.records.length > 0) {
-    //         let column = xFieldId;
-    //         let newArray = [...queryValues.records
-    //             .filter(rec => typeof rec.getCellValue(`${column}`) !== 'object')
-    //             .map((rec) => {
-    //                 let nameColumn = table.fields.filter(field => field.description.includes('#NAME#'))[0];
-    //                 return {
-    //                     email: rec.getCellValue(`${column}`),
-    //                     name: rec.getCellValueAsString(nameColumn.id)
-    //                 };
-    //             }).sort()];
-    //         const uniqueSet = new Set(newArray);
-    //         console.log('uniqueSet.values()', uniqueSet.values());
-    //         const finalArray = [...uniqueSet.values()].map((each) => {
-    //             return {
-    //                 label: `${each.name} (${each.email})`,
-    //                 id: each.email,
-    //                 name: each.name,
-    //                 email: each.email
-    //             };
-    //         })
-    //         console.log('finalArray', finalArray);
-    //         setOptions(finalArray);
-    //     }
-    //     console.log('options above', options);
-    // })();
+    const handleSetOptions = async () => {
+        const queryValues = await initialEvalView.selectRecordsAsync();
+        await queryValues.loadDataAsync();
+        if (queryValues.records && queryValues.records.length > 0) {
+            let column = xFieldId;
+            let newArray = [...queryValues.records
+                .filter(rec => typeof rec.getCellValue(`${column}`) !== 'object')
+                .map((rec) => {
+                    let nameColumn = table.fields.filter(field => field.description.includes('#NAME#'))[0];
+                    return {
+                        email: rec.getCellValue(`${column}`),
+                        name: rec.getCellValueAsString(nameColumn.id)
+                    };
+                }).sort()];
+            const uniqueSet = new Set(newArray);
+            const finalArray = [...uniqueSet.values()].map((each) => {
+                return {
+                    label: `${each.name} (${each.email})`,
+                    id: each.email,
+                    name: each.name,
+                    email: each.email
+                };
+            })
+            setOptions(finalArray);
+        }
+    }
 
-    let patientEmail = globalConfig.get(GlobalConfigKeys.X_PATIENT_EMAIL);
+    const setEvalInEffect = async () => {
+        const queryRecords = await table.selectRecordsAsync();
+        await queryRecords.loadDataAsync();
+        records = queryRecords.records ? [...queryRecords.records].filter((record) => {
+                console.log('value', value);
+                console.log('patientEmail', patientEmail);
+                if (patientEmail) return record.getCellValue(`${xFieldId}`) === patientEmail;
+                return record;
+            })
+            : null;
 
-    // if (patientEmail) {
-    //     console.log('patientEmail lower', patientEmail);
-    //     handleSetValue([options.find(each => {
-    //         console.log('each', each);
-    //         return each.email === patientEmail
-    //     })]);
-    // }
+        setStateRecords(records);
+        if (patientEmail && records && records.length > 0) {
+            const exists = records.find((record) =>
+                record.getCellValue('Eval Type') === 'A'
+                && record.getCellValue(`${xFieldId}`) === patientEmail);
+            handleSetEval(exists);
+        } else {
+            handleSetEval(null);
+        }
+        console.log('initialEval', initialEval);
+    }
 
-    // let selectedValue = globalConfig.get(GlobalConfigKeys.X_SELECTED_VALUE);
-    // if (selectedValue) {
-    //     let tempValue = JSON.parse(selectedValue);
-    //     setValue(tempValue);
-    // }
-
-
-
-
-    let fake = false;
-
-    useEffect(() => {
-            (async () => {
-                const queryValues = await initialEvalView.selectRecordsAsync();
-                await queryValues.loadDataAsync();
-                if (queryValues.records && queryValues.records.length > 0) {
-                    let column = xFieldId;
-                    let newArray = [...queryValues.records
-                        .filter(rec => typeof rec.getCellValue(`${column}`) !== 'object')
-                        .map((rec) => {
-                            let nameColumn = table.fields.filter(field => field.description.includes('#NAME#'))[0];
-                            return {
-                                email: rec.getCellValue(`${column}`),
-                                name: rec.getCellValueAsString(nameColumn.id)
-                            };
-                        }).sort()];
-                    const uniqueSet = new Set(newArray);
-                    console.log('uniqueSet.values()', uniqueSet.values());
-                    const finalArray = [...uniqueSet.values()].map((each) => {
-                        return {
-                            label: `${each.name} (${each.email})`,
-                            id: each.email,
-                            name: each.name,
-                            email: each.email
-                        };
-                    })
-                    setOptions(finalArray);
-                }
-            })();
-        }, []);
-
-    useEffect(() => {
-        (async () => {
-
-            if (table && initialEvalView) {
-                if (xFieldId && !table.getFieldByIdIfExists(xFieldId)) xFieldId = null;
-                console.log('xFieldId', xFieldId);
-                // if (true) {
-                    const queryValues = await initialEvalView.selectRecordsAsync();
-                    await queryValues.loadDataAsync();
-                    if (queryValues.records && queryValues.records.length > 0) {
-                        let column = xFieldId;
-                        let newArray = [...queryValues.records
-                            .filter(rec => typeof rec.getCellValue(`${column}`) !== 'object')
-                            .map((rec) => {
-                                let nameColumn = table.fields.filter(field => field.description.includes('#NAME#'))[0];
-                                return {
-                                    email: rec.getCellValue(`${column}`),
-                                    name: rec.getCellValueAsString(nameColumn.id)
-                                };
-                            }).sort()];
-                        const uniqueSet = new Set(newArray);
-                        console.log('uniqueSet.values()', uniqueSet.values());
-                        const finalArray = [...uniqueSet.values()].map((each) => {
-                            return {
-                                label: `${each.name} (${each.email})`,
-                                id: each.email,
-                                name: each.name,
-                                email: each.email
-                            };
-                        })
-                        setOptions(finalArray);
-                    }
-                    const queryRecords = await table.selectRecordsAsync();
-                    await queryRecords.loadDataAsync();
-                    // const patientEmail = globalConfig.get(GlobalConfigKeys.X_PATIENT_EMAIL);
-                    records = queryRecords.records ? [...queryRecords.records].filter((record) => {
-                            console.log('value', value);
-                            console.log('patientEmail', patientEmail);
-                            if (patientEmail) return record.getCellValue(`${xFieldId}`) === patientEmail;
-                            return record;
-                        })
-                        : null;
-                    console.log('records', records, options);
-                    console.log('options', options);
-
-                    setStateRecords(records);
-                    // console.log('records.length', records.length);
-                    if (patientEmail && records && records.length > 0) {
-                        const exists = records.find((record) =>
-                            record.getCellValue('Eval Type') === 'A'
-                            && record.getCellValue(`${xFieldId}`) === patientEmail);
-                        // console.log('exists', exists);
-                        handleSetEval(exists);
-                    } else {
-                        handleSetEval(null);
-                    }
-                    console.log('initialEval', initialEval);
-                }
-            // if (patientEmail && options && options.length > 0) {
-            //     console.log('patientEmail lower', patientEmail);
-            //     console.log('patientEmail lower options', options);
-            //     handleSetValue([options.find(each => {
-            //         console.log('each', each);
-            //         return each.email === patientEmail
-            //     })]);
-            // }
-            // }
-
-            console.log('triggered useEffect table, xFieldId, value')
-        })();
-    }, [value]);
-
-    useEffect(() => {
-            (async () => {
-                if (patientEmail) {
-                    console.log('patientEmail lower', patientEmail);
-                    console.log('patientEmail lower options', options);
-                    const newSelectedValue = options.find(each => {
-                        console.log('each', each);
-                        return each.email === patientEmail
-                    })
-                    if (newSelectedValue) {
-                        handleSetValue([newSelectedValue]);
-                    }
-                }
-                const queryValues = await initialEvalView.selectRecordsAsync();
-                await queryValues.loadDataAsync();
-                if (queryValues.records && queryValues.records.length > 0) {
-                    let column = xFieldId;
-                    let newArray = [...queryValues.records
-                        .filter(rec => typeof rec.getCellValue(`${column}`) !== 'object')
-                        .map((rec) => {
-                            let nameColumn = table.fields.filter(field => field.description.includes('#NAME#'))[0];
-                            return {
-                                email: rec.getCellValue(`${column}`),
-                                name: rec.getCellValueAsString(nameColumn.id)
-                            };
-                        }).sort()];
-                    const uniqueSet = new Set(newArray);
-                    console.log('uniqueSet.values()', uniqueSet.values());
-                    const finalArray = [...uniqueSet.values()].map((each) => {
-                        return {
-                            label: `${each.name} (${each.email})`,
-                            id: each.email,
-                            name: each.name,
-                            email: each.email
-                        };
-                    })
-                    setOptions(finalArray);
-                }
-                const queryRecords = await table.selectRecordsAsync();
-                await queryRecords.loadDataAsync();
-                // const patientEmail = globalConfig.get(GlobalConfigKeys.X_PATIENT_EMAIL);
-                records = queryRecords.records ? [...queryRecords.records].filter((record) => {
-                        console.log('value', value);
-                        console.log('patientEmail', patientEmail);
-                        if (patientEmail) return record.getCellValue(`${xFieldId}`) === patientEmail;
-                        return record;
-                    })
-                    : null;
-                console.log('records', records, options);
-                console.log('options', options);
-
-                setStateRecords(records);
-                // console.log('records.length', records.length);
-                if (patientEmail && records && records.length > 0) {
-                    const exists = records.find((record) =>
-                        record.getCellValue('Eval Type') === 'A'
-                        && record.getCellValue(`${xFieldId}`) === patientEmail);
-                    // console.log('exists', exists);
-                    handleSetEval(exists);
-                } else {
-                    handleSetEval(null);
-                }
-            })();
-        }, [initialEval]);
-
-    const fillValue = () => {
+    const handleSetValueInEffect = async () => {
         if (patientEmail) {
             console.log('patientEmail lower', patientEmail);
             console.log('patientEmail lower options', options);
@@ -317,13 +151,36 @@ function Dashboard() {
             if (newSelectedValue) {
                 handleSetValue([newSelectedValue]);
             }
-            return value;
         }
     }
 
-    // const selected = value;
+    useEffect(() => {
+            (async () => {
+                await handleSetOptions();
+            })();
+        }, []);
+
+    useEffect(() => {
+        (async () => {
+            if (table && initialEvalView) {
+                if (xFieldId && !table.getFieldByIdIfExists(xFieldId)) xFieldId = null;
+                console.log('xFieldId', xFieldId);
+                    await handleSetOptions();
+                    await setEvalInEffect();
+                }
+            console.log('triggered useEffect table, xFieldId, value')
+        })();
+    }, [value]);
+
+    useEffect(() => {
+            (async () => {
+                await handleSetValueInEffect();
+                await handleSetOptions();
+                await setEvalInEffect();
+            })();
+        }, [initialEval]);
+
     console.log('value', value);
-    const viewport = useViewport();
 
     return (
         <>
@@ -336,15 +193,13 @@ function Dashboard() {
                 display="flex"
                 flexDirection="column"
             >
-                {console.log('options', options)}
+                {console.log('options on dashboard for typeahead', options)}
 
-                <Settings table={table} xFieldValues={options} setFieldValue={handleSetValue}
-                                                         value={value}/>
+                <Settings table={table} xFieldValues={options} setFieldValue={handleSetValue} value={value}/>
 
                 {value && initialEval && options && options.length > 0 ? (
                     <>
                         <Box position="relative" display="flex" flex="auto" flexWrap="wrap" padding={3}>
-                            {/*<div style={{display: "flex", maxWidth: viewport.width, flexWrap: "wrap"}}>*/}
                             <PatientInfo table={table} initialEval={initialEval}/>
                             <div style={{
                                 display: "flex",
@@ -354,14 +209,9 @@ function Dashboard() {
                             }}>
                                 <NumericStats table={table} initialEval={initialEval} records={stateRecords}/>
                                 <MedHistory table={table} initialEval={initialEval}/>
-
                             </div>
                             <HealthTags style={{height: "fit-content"}} table={table} initialEval={initialEval}/>
-
-                            {/*</div>*/}
-                            {/*<div style={{display: "flex", maxWidth: viewport.width, flexWrap: "wrap"}}>*/}
                             <Objectives style={{height: "fit-content"}} table={table} initialEval={initialEval}/>
-                            {/*</div>*/}
                         </Box>
                         <Box position="relative" flex="auto" padding={3}>
                             <Charts table={table} records={stateRecords}/>
@@ -374,403 +224,9 @@ function Dashboard() {
     );
 }
 
-export const DashboardTile = ({children, ...props}) => {
-    return (
-        <Box
-            // position="relative"
-            // flex="auto"
-            padding={3}
-            margin={2}
-            borderRadius="large"
-            backgroundColor="lightGray1"
-            // minWidth="33%"
-            // maxWidth="50%"
-            {...props}>{children}</Box>
-    );
-}
-
-const SummaryStat = ({label, value, units}) => <>
-    <SummaryStatStyled padding={2} margin={1} alignItems="center" justifyContent="center" key={label}>
-        <Label>{label}</Label>
-        <div>
-            <span>{value} {units ? (<span>{units}</span>) : null}</span>
-        </div>
-    </SummaryStatStyled>
-</>
-
-const SummaryStatStyled = styled(Box)`
-    flex-direction: column;
-    display: flex;
-    justify-content: center;
-    align-content: center;
-`;
-
-const TableText = ({children, ...props}) => <Text padding={1} margin={2} {...props}>{children}</Text>
-
-const NoEvalTile = () => <DashboardTile>
-    <Heading>
-        Nenhum dado encontrado.
-    </Heading>
-</DashboardTile>
-
-const PatientInfo = ({table, initialEval}) => {
-    const calculateAge = (dobField) => {
-        return {
-            ...setLabel(dobField, "#AGE_LABEL#"),
-            value: moment().diff(moment(dobField.value), 'years')
-        }
-    }
-    // const dobField = table ? table.fields.filter(field => field.description?.includes("#DoB#"))[0] : null;
-    const dob = table ? table.fields.filter(field => field.description?.includes("#DoB#")).map(field => {
-        return {
-            description: field.description,
-            ...setLabel(field),
-            value: initialEval.getCellValueAsString(field.id)
-        }
-    })[0] : '';
-    const age = initialEval && dob.description ? calculateAge(dob) : null;
-    const name = table ? table.fields.filter(field => field.description?.includes("#NAME#")).map(field => {
-        return {
-            ...setLabel(field),
-            value: initialEval.getCellValueAsString(field.id)
-        }
-    })[0] : '';
-    const email = table ? table.fields.filter(field => field.description?.includes("#EMAIL#")).map(field => {
-        return {
-            ...setLabel(field),
-            value: initialEval.getCellValueAsString(field.id)
-        }
-    })[0] : '';
-    const sex = table ? table.fields.filter(field => field.description?.includes("#SEX#")).map(field => {
-        return {
-            ...setLabel(field),
-            value: initialEval.getCellValueAsString(field.id)
-        }
-    })[0] : '';
-    const contact = table ? table.fields.filter(field => field.description?.includes("#CONTACT#")).map(field => {
-        return {
-            ...setLabel(field),
-            value: initialEval.getCellValueAsString(field.id)
-        }
-    })[0] : '';
-    const phone = table ? table.fields.filter(field => field.description?.includes("#PHONE#")).map(field => {
-        return {
-            ...setLabel(field),
-            value: initialEval.getCellValueAsString(field.id)
-        }
-    })[0] : '';
-
-
-    return (
-        <>{initialEval ?
-            <DashboardTile height={"fit-content"} width={"fit-content"}>
-                <Label>Informações Gerais</Label>
-                <table>
-                    <tr>
-                        <td><TableText>{name?.label || ''} </TableText></td>
-                        <td><TableText>{name?.value || ''}</TableText></td>
-                    </tr>
-                    <tr>
-                        <td><TableText>{email?.label || ''}</TableText></td>
-                        <td><TableText>{email?.value || ''}</TableText></td>
-                    </tr>
-                    <tr>
-                        <td><TableText>{age?.label || ''}</TableText></td>
-                        <td><TableText>{age?.value || ''}</TableText></td>
-                    </tr>
-                    <tr>
-                        <td><TableText>{dob?.label || ''}</TableText></td>
-                        <td><TableText>{dob?.value || ''}</TableText></td>
-                    </tr>
-                    <tr>
-                        <td><TableText>{sex?.label || ''}</TableText></td>
-                        <td><TableText>{sex?.value || ''}</TableText></td>
-                    </tr>
-                    <tr>
-                        <td><TableText>{contact?.label || ''}</TableText></td>
-                        <td><TableText>{contact?.value || ''}</TableText></td>
-                    </tr>
-                    <tr>
-                        <td><TableText>{phone?.label || ''}</TableText></td>
-                        <td><TableText>{phone?.value || ''}</TableText></td>
-                    </tr>
-                </table>
-            </DashboardTile> : <NoEvalTile/>
-        }
-        </>
-    );
-}
-
-const SpacedText = ({children, ...props}) => <Text padding={1} {...props}>{children}</Text>
-
-const Objectives = ({table, initialEval}) => {
-    const objectives = table.fields
-        .filter(field => {
-            const value = initialEval.getCellValue(field.name);
-            return field.type === 'rating' &&
-                // field.name !== 'Sleep Quality' &&
-                field.description?.includes('OBJ') &&
-                value >= 4;
-        })
-        .map(field => {
-            const name = field.name;
-            const value = initialEval.getCellValue(field.name);
-            return {
-                ...setLabel(field),
-                name,
-                value
-            }
-        });
-    const renderObjectives = (objectives) => {
-        return (
-            <>
-                {objectives && objectives.length > 0 ?
-                    <table style={{width: "100%"}}>
-                        {objectives.map(obj =>
-                            <tr style={{display: "flex", justifyContent: "space-between", margin: 5, width: "100%"}}
-                                key={obj.name}>
-                                <td style={{margin: 5}}>{obj.label}</td>
-                                <td style={{margin: 5, alignSelf: "end", textAlign: "end"}}>
-                                    <div>{Array(obj.value * 1).fill(true).map((o, index) => <Icon key={`${obj.name}-star-${index}`} name="star" size={24}/>)}</div>
-                                </td>
-                            </tr>)}
-                    </table>
-                    :
-                    <NoEvalTile/>
-                }
-            </>
-        );
-    }
-
-    return (
-        <>
-            <DashboardTile
-                position="relative"
-                flex="auto"
-                padding={3}
-                borderRadius="large"
-                backgroundColor="lightGray1"
-                minWidth={300}
-                maxWidth={400}
-                height={"fit-content"}
-            >
-                <Label>OBJETIVOS</Label>
-                {renderObjectives(objectives)}
-            </DashboardTile>
-
-
-        </>
-
-    );
-}
-
-export const sortByField = (field) => (a, b) => b.getCellValue(`${field}`) - a.getCellValue(`${field}`);
-
-const NumericStats = ({table, initialEval, records}) => {
-
-    const weightField = table ? table.fields.filter(field => field.description?.includes("#WEIGHT#")).map(field => setLabel(field))[0] : null;
-    const heightField = table ? table.fields.filter(field => field.description?.includes("#HEIGHT#")).map(field => setLabel(field))[0] : null;
-
-    // const sortByField = (field) => (a, b) => b.getCellValue(`${field}`) - a.getCellValue(`${field}`);
-
-    // console.log(`weightField: ${weightField} | heightField: ${heightField}`);
-    // console.log(`weightField.name: ${weightField.name} | heightField.name: ${heightField.name}`);
-    // console.log(`weightField.label: ${weightField.label} | heightField.label: ${heightField.label}`);
-    // console.log('[...records.sort(sortByField(\'Date Created\'))][0]', [...records.sort(sortByField('Date Created'))]);
-
-    const latestWeight = weightField && records && records.length > 0 ? [...records.sort(sortByField('Date Created'))][0].getCellValue(weightField.name) : null;
-    const latestHeight = heightField && records && records.length > 0 ? [...records.sort(sortByField('Date Created'))][0].getCellValue(heightField.name) : null;
-    const bmi = latestWeight && latestHeight ? (Number((latestWeight) / Math.pow(latestHeight / 100, 2))).toFixed(2) : 'N/A';
-
-    const values = [
-        {
-            value: bmi,
-            units: '',
-            label: 'IMC'
-        },
-        {
-            value: latestWeight,
-            units: 'kg',
-            label: weightField.label
-        },
-        {
-            value: latestHeight,
-            units: 'cm',
-            label: heightField.label
-        },
-    ];
-
-    return (
-        <div>
-            <DashboardTile>
-                <div style={{display: "flex", justifyContent: "space-evenly"}}>
-                    {values && values.map(each =>
-                        <SummaryStat
-                            value={each.value}
-                            label={each.label}
-                            units={each.units}
-                            key={each.label}
-                        />
-                    )}
-                </div>
-            </DashboardTile>
-        </div>
-    );
-}
-
-export const setLabel = (field, labelTag = "#LABEL#") => {
-    const labelTags = (field.description?.match(new RegExp(labelTag, "g")) || []).length;
-    let label;
-    if (labelTags === 2) label = field.description?.split(`${labelTag}`)[1];
-    if (!label || label?.trim() === '') label = field.name;
-    return {...field, label, name: field.name, description: field.description};
-}
-
-const MedHistory = ({table, initialEval}) => {
-
-    const medFields = table ? table.fields
-            .filter(field => {
-                return field.description?.includes("#MED#") && initialEval.getCellValueAsString(field.id) === 'Sim';
-            })
-            .map(field => {
-                return setLabel(field);
-            })
-        : null;
-    const famFields = table ? table.fields
-            .filter(field => {
-                return field.description?.includes("#FAM#") && initialEval.getCellValueAsString(field.id) !== '';
-            })
-            .map(field => {
-                let fieldWithLabel = setLabel(field);
-                let value = initialEval.getCellValueAsString(field.id);
-                return {...fieldWithLabel, value};
-            })
-        : null;
-    const cancerFields = table ? table.fields
-            .filter(field => {
-                return field.description?.includes("#CAN#") && initialEval.getCellValueAsString(field.id) !== '';
-            })
-            .map(field => {
-                let fieldWithLabel = setLabel(field);
-                let value = initialEval.getCellValueAsString(field.id);
-                return {...fieldWithLabel, value};
-            })
-        : null;
-
-    return (
-        <div>
-            <DashboardTile>
-                <Box padding={1} marginBottom={2}>
-                    <Label>
-                        Uso de remédios:
-                    </Label>
-                    {medFields && medFields.length > 0 ? medFields.map(field =>
-                            <Text>{field.label}</Text>) :
-                        <Text>Nenhum</Text>}
-                </Box>
-                <Box padding={1} marginBottom={2}>
-                    <Label>
-                        História da Família:
-                    </Label>
-                    {famFields && famFields.length > 0 ? famFields.map(field =>
-                            <>
-                                <Text>{field.label} ({field.value})</Text>
-                            </>) :
-                        <Text>Nenhum</Text>}
-                </Box>
-                <Box padding={1}>
-                    <Label>
-                        História do Câncer:
-                    </Label>
-                    {cancerFields && cancerFields.length > 0 ? cancerFields.map(field =>
-                            <>
-                                <Text>{field.label} ({field.value})</Text>
-                            </>) :
-                        <Text>Nenhum</Text>}
-                </Box>
-            </DashboardTile>
-        </div>
-    );
-}
-
-const HTag = ({label, renderIcon, key}) => <>
-    <Box display="flex" alignItems="center" justifyContent="center" flexDirection="column" flexBasis="content"
-         margin={3} padding={2} key={key}>
-        <Box>
-            {renderIcon}
-        </Box>
-        <Box>
-            <Label>{label}</Label>
-        </Box>
-    </Box>
-</>
-
-const HealthTags = ({table, initialEval}) => {
-    const base = useBase();
-
-    const tagsTable = base.tables.filter(table => table.description.includes('#TAGS#')) ? base.tables.filter(table => table.description.includes('#TAGS#'))[0] : null;
-
-    let attachmentField = tagsTable ? tagsTable.fields?.filter(field => field.description?.includes('#ATTACH#'))[0] : null;
-    const displayNameField = tagsTable ? tagsTable.fields?.filter(field => field.description?.includes('#DISPLAY#'))[0] : null;
-
-    const tagsRecords = tagsTable ? useRecords(tagsTable) : null;
-
-    let patientTags = table && initialEval && table.fields.filter(field => field.description?.includes('#TAGS#')).length > 0 ?
-        table.fields.filter(field => field.description?.includes('#TAGS#')).map(field => initialEval.getCellValue(field.id))[0] : null;
-    const tags = patientTags?.length > 0 && tagsRecords?.length > 0 && attachmentField ?
-        patientTags.map(tag => {
-            const record = tagsTable.selectRecords().getRecordById(tag.id);
-            const displayName = record.getCellValueAsString(displayNameField.id);
-            let attachmentsExist = record.getCellValue(attachmentField.id) ? record.getCellValue(attachmentField.id)[0] : null;
-            const defaultExists = tagsRecords.find(record => record.getCellValueAsString('Tag') === 'DEFAULT');
-            console.log('defaultExists', defaultExists);
-            if (!attachmentsExist && defaultExists) attachmentsExist = defaultExists.getCellValue(attachmentField.id) ? defaultExists.getCellValue(attachmentField.id)[0] : null;
-            if (!attachmentsExist) {
-                return {
-                    ...record,
-                    label: displayName,
-                    renderIcon: <Box key={tag.id} display="flex" justifyContent="center" alignContent="center"
-                                     style={{backgroundColor: "#FBDEDE", height: 36, width: 36, borderRadius: 36}}>
-                        <span style={{color: "#EA5A5A", fontWeight: "bold", alignSelf: "center"}}>?</span>
-                    </Box>
-                }
-            }
-            const attachmentObj = attachmentsExist;
-            const clientUrl =
-                record.getAttachmentClientUrlFromCellValueUrl(
-                    attachmentObj.id,
-                    attachmentObj.url
-                );
-            return {
-                ...record,
-                label: displayName,
-                renderIcon: <img key={tag.id} src={clientUrl} width={36} alt={record.name}/>
-            }
-        })
-        : null;
-
-    return (
-        <>
-            <DashboardTile height={"fit-content"} width={"fit-content"}>
-                <Label>TAGS DE SAÚDE / CONDIÇÃO</Label>
-                <div>{tagsTable ?
-                    <Box display="flex" flexWrap="wrap" maxWidth={300}
-                         style={{display: "flex", justifyContent: "space-evenly", marginTop: 12, flexWrap: "wrap"}}>
-                        {tags && tags.length > 0 ? tags.map((tag, index) =>
-                            <HTag key={`tag${index}-${new Date().getTime()}`} label={tag.label} renderIcon={tag.renderIcon} />
-                        ) : <Text>Nenhum</Text>}
-                    </Box>
-                    : <Heading>Cannot find TAGS table. Add #TAGS# to table description to ensure it can be
-                        found.</Heading>}
-                </div>
-            </DashboardTile>
-        </>
-    );
-}
-
 function Settings({table, xFieldValues, setFieldValue, value}) {
 
-    const ref = React.forwardRef();
+    const ref = React.createRef();
 
     const changeBackground = (e) => {
         e.target.style.background = '#F0F0F0';
@@ -893,7 +349,7 @@ function Settings({table, xFieldValues, setFieldValue, value}) {
                             )}
                             maxResults={2}
                             placeholder={"Encontre um paciente..."}
-                            paginationText={"          Exibir resultados adicionais..."}
+                            paginationText={"Exibir resultados adicionais..."}
                             renderMenu={(results, menuProps) => {
                                 console.log('results', results);
                                 if (!results.length) {

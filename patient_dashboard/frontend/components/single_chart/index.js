@@ -2,64 +2,131 @@ import {
     Box,
     Button,
     ColorPalette,
-    colors, colorUtils,
-    FieldPicker,
+    colors,
+    colorUtils,
     FormField,
     Heading,
-    Icon, Input,
+    Icon,
+    Input,
     Select,
-    Text, useGlobalConfig
+    useGlobalConfig
 } from '@airtable/blocks/ui';
 import React, {useEffect, useState} from 'react';
-import {Bar, Line} from 'react-chartjs-2';
-import {GlobalConfigKeys, setLabel} from "../../index";
+import {Bar} from 'react-chartjs-2';
+import {GlobalConfigKeys} from "../../index";
+import moment from "moment";
+import {setLabel} from "../../utils";
 
-function SingleChart({table, deleteTable, id, records, index}) {
+function SingleChart({table, deleteTable, id, records}) {
 
     const globalConfig = useGlobalConfig();
-
     const initialFieldObj = {field: null, chartOption: null, color: null};
 
     const [fieldSelectOptions, setFieldSelectOptions] = useState([]);
-    const [xField, setXField] = useState(null);
     const [fields, setFields] = useState([{...initialFieldObj}]);
     const [dateField, setDateField] = useState(null);
     const [chartTitle, setChartTitle] = useState(`Gráfico criado em ${new Date().toLocaleString()}`);
     const [editTitle, setEditTitle] = useState(false);
+    const [data, setData] = useState(null);
+    const [options, setOptions] = useState(undefined);
 
+    // set chart on load
     useEffect(() => {
-            (async () => {
-                let chartSaved = globalConfig.get([GlobalConfigKeys.X_CHARTS, id]);
-                // console.log('chartSaved', chartSaved);
-                if (chartSaved) {
-                    let chartData = JSON.parse(chartSaved);
-                    if (chartData) {
-                        setFields(chartData.fields);
-                        setChartTitle(chartData.chartTitle);
-                    }
+        (async () => {
+            let chartSaved = globalConfig.get([GlobalConfigKeys.X_CHARTS, id]);
+            if (chartSaved) {
+                let chartData = JSON.parse(chartSaved);
+                if (chartData) {
+                    setFields(chartData.fields);
+                    setChartTitle(chartData.chartTitle);
                 }
-            })();
-        }, []);
+            }
+        })();
+    }, []);
+
+    // save to globalConfig for chart at id on changes
+    useEffect(() => {
+        (async () => {
+            let chartJson = JSON.stringify({fields, chartTitle});
+            let path = [GlobalConfigKeys.X_CHARTS, id];
+            await globalConfig.setPathsAsync([{path, value: chartJson}])
+        })();
+    }, [chartTitle, fields]);
 
     useEffect(() => {
-            (async () => {
-                let oldChart = globalConfig.get([GlobalConfigKeys.X_CHARTS, id]);
-                let chartJson = JSON.stringify({fields, chartTitle});
-                // console.log('chartJson', chartJson);
-                let path = [GlobalConfigKeys.X_CHARTS, id];
-                await globalConfig.setPathsAsync([{path, value: chartJson}])
-                // console.log('globalConfig.get(GlobalConfigKeys.X_CHARTS)', globalConfig.get(GlobalConfigKeys.X_CHARTS));
-            })();
-        }, [chartTitle, fields]);
+        (async () => {
+            const dateFieldTemp = table &&
+            table.fields.filter(field => field.description?.includes('#DATE#')) ?
+                table.fields.filter(field => field.description?.includes('#DATE#'))[0]
+                : null;
+            setDateField(dateFieldTemp);
+            const newData = records && atLeastOneMetric() ? new_getChartData({
+                records,
+                fields,
+                dateField,
+                table
+            }) : null;
+            setData({...newData});
+
+            if (table) {
+                const tempFieldOptions = table.fields.filter(field => field.description?.includes('#CHART#')).map(field => {
+                    return {
+                        ...setLabel(field),
+                        // label: field.name,
+                        value: field.id
+                    }
+                });
+                setFieldSelectOptions([...tempFieldOptions]);
+            }
+        })();
+        console.log('triggered useEffect table, records, fields')
+
+    }, [table, records, fields]);
+
+    useEffect(() => {
+        (async () => {
+            if (data && atLeastOneMetric() && data.datasets) {
+                console.log('data.datasets', data.datasets);
+                const tempOptions = {
+                    maintainAspectRatio: true,
+                    scales: {
+                        yAxes: [...data.datasets.map((d, index) => {
+                            return {
+                                type: 'linear',
+                                display: true,
+                                // position: index === 0 ? 'left' : 'right',
+                                id: d.yAxisID
+                            }
+                        })
+                        ],
+                        xAxes: [
+                            {
+                                type: 'time',
+                                scaleLabel: {
+                                    display: true,
+                                    labelString: 'Data'
+                                }
+                            }
+                        ],
+                    },
+                    legend: {
+                        display: true,
+                    },
+                };
+                setOptions({...tempOptions});
+            }
+        })();
+        console.log('triggered useEffect data, fields')
+    }, [data]);
 
     const handleSetFields = (field, index) => {
         setData(null);
         console.log('field', field);
         fields[index] = field;
         console.log('fields[index]', fields[index]);
-        // const newFieldObj = {...fields, field};
         setFields([...fields]);
         console.log('fields', fields);
+        // setOptions([]);
     }
 
     const deleteField = (index) => {
@@ -77,35 +144,6 @@ function SingleChart({table, deleteTable, id, records, index}) {
         setFields([...fields, {...initialFieldObj}]);
     }
 
-    const [data, setData] = useState(null);
-    const [options, setOptions] = useState(undefined);
-
-
-    useEffect(() => {
-        (async () => {
-            const dateFieldTemp = table &&
-            table.fields.filter(field => field.description?.includes('#DATE#')) ?
-                table.fields.filter(field => field.description?.includes('#DATE#'))[0]
-                : null;
-            setDateField(dateFieldTemp);
-            const newData = records && atLeastOneMetric() ? new_getChartData({records, fields, dateField, table}) : null;
-            setData({...newData});
-
-            if (table) {
-                const tempFieldOptions = table.fields.filter(field => field.description?.includes('#CHART#')).map(field => {
-                    return {
-                        ...setLabel(field),
-                        // label: field.name,
-                        value: field.id
-                    }
-                });
-                setFieldSelectOptions([...tempFieldOptions]);
-            }
-
-        })();
-        console.log('triggered useEffect table, records, fields')
-
-    }, [table, records, fields]);
     const atLeastOneMetric = () => {
         let flag = false;
         for (const f of fields) {
@@ -117,66 +155,6 @@ function SingleChart({table, deleteTable, id, records, index}) {
         }
         return flag;
     }
-    // const [data, setData] = useState(null);
-    // const data = records && xField ? getChartData({records, xField}) : null;
-    // const data = records && atLeastOneMetric() ? new_getChartData({records, fields, dateField}) : null;
-    let timeFormat = 'MM/DD/YYYY HH:mm';
-
-    useEffect(() => {
-            (async () => {
-                if (data && atLeastOneMetric() && data.datasets) {
-                    const tempOptions = {
-                        maintainAspectRatio: true,
-                        scales: {
-                            yAxes: [...data.datasets.map((d, index) => {
-                                return {
-                                    // ticks: {
-                                    //     major: true,
-                                    //     minor: false
-                                    //     // beginAtZero: true,
-                                    //
-                                    // },
-                                    type: 'linear',
-                                    display: true,
-                                    // position: index === 0 ? 'left' : 'right',
-                                    id: d.yAxisID
-
-                                }
-                            })
-
-                            ],
-                            xAxes: [
-                                {
-                                    type: 'time',
-                                    // distribution: 'linear',
-                                    // time: {
-                                    //     unit: 'day',
-                                    // displayFormats: {
-                                    //     day: 'MMM D'
-                                    // },
-                                    // format: 'MMM D hA',
-                                    // },
-                                    // ticks: {
-                                    //     source: 'auto'
-                                    // },
-                                    scaleLabel: {
-                                        display: true,
-                                        labelString: 'Date'
-                                    }
-                                }
-                            ],
-                        },
-                        legend: {
-                            display: true,
-
-                        },
-                        // maintainAspectRatio: true
-                    };
-                    setOptions({...tempOptions});
-                }
-            })();
-        console.log('triggered useEffect data, fields')
-    }, [data, fields]);
 
     return (
         <Box
@@ -195,16 +173,17 @@ function SingleChart({table, deleteTable, id, records, index}) {
             padding={1}
 
         >
-            <Settings table={table} fieldOptions={fieldSelectOptions} filters={fields} setFields={handleSetFields} deleteTable={deleteTable}
+            <Settings table={table} fieldOptions={fieldSelectOptions} filters={fields} setFields={handleSetFields}
+                      deleteTable={deleteTable}
                       deleteField={deleteField} id={id} addField={addField}
                       chartTitle={chartTitle} setChartTitle={setChartTitle}
-            editTitle={editTitle} setEditTitle={setEditTitle}
+                      editTitle={editTitle} setEditTitle={setEditTitle}
             />
-            {data && options && atLeastOneMetric() && (
-                <Box position="relative" flex="auto" padding={3} >
-                    {console.log('options',options)}
+            {data && options && options.length > 0 && atLeastOneMetric() && (
+                <Box position="relative" flex="auto" padding={3}>
+                    {console.log('options', options)}
                     {/*{data.datasets && data.datasets.length > 0 &&*/}
-                        <Bar data={data} options={options}/>
+                    <Bar data={data} options={options}/>
                     {/*// :*/}
                     {/*//     <Line data={data} options={options} />*/}
                     {/*}*/}
@@ -217,10 +196,8 @@ function SingleChart({table, deleteTable, id, records, index}) {
 }
 
 function new_getChartData({records, fields, dateField, table}) {
-    const recordsByXValueString = new Map();
 
     const datasets = [];
-    console.log('dateField', dateField);
 
     for (const [index, f] of fields.entries()) {
         console.log('f', f);
@@ -239,74 +216,23 @@ function new_getChartData({records, fields, dateField, table}) {
         for (const record of records) {
             console.log('record', record);
 
-            // const labels = [];
-            // const data = [];
             const yValue = record.getCellValue(f.field) || 0;
-            // const date = record.createdTime;
             const date = dateField ? record.getCellValue(dateField.id) : null;
             console.log('date', date);
             console.log('yValue', yValue);
-            // const xValueString = xValue === null ? null : record.getCellValue(xField);
 
-            // if (!recordsByXValueString.has(xValueString)) {
-            //     recordsByXValueString.set(xValueString, [record]);
-            // } else {
-            //     recordsByXValueString.get(xValueString).push(record);
-            // }
             if (fields.length === 1 && yValue === 0) {
                 continue;
             }
-            datasets[index].data.push({y: yValue, x: date});
-            // datasets[index].labels.push(date.toString());
-
+            datasets[index].data.push({y: yValue, x: moment(date).format('YYYY-MM-DD HH:mm A')});
             console.log('data', datasets[index].data);
         }
     }
     console.log('datasets', datasets);
 
-    // for (const [xValueString, records] of recordsByXValueString.entries()) {
-    //     const label = xValueString === null ? 'Empty' : xValueString;
-    //     labels.push(label);
-    //     points.push(records.length);
-    // }
-
     const data = {
         // labels: datasets[0].labels,
         datasets: [...datasets],
-    };
-    return data;
-}
-
-
-function getChartData({records, xField}) {
-    const recordsByXValueString = new Map();
-    for (const record of records) {
-        const xValue = record.getCellValue(xField);
-        const xValueString = xValue === null ? null : record.getCellValueAsString(xField);
-
-        if (!recordsByXValueString.has(xValueString)) {
-            recordsByXValueString.set(xValueString, [record]);
-        } else {
-            recordsByXValueString.get(xValueString).push(record);
-        }
-    }
-
-    const labels = [];
-    const points = [];
-    for (const [xValueString, records] of recordsByXValueString.entries()) {
-        const label = xValueString === null ? 'Empty' : xValueString;
-        labels.push(label);
-        points.push(records.length);
-    }
-
-    const data = {
-        labels,
-        datasets: [
-            {
-                backgroundColor: '#4380f1',
-                data: points,
-            },
-        ],
     };
     return data;
 }
@@ -328,17 +254,21 @@ function Settings({table, filters, setFields, deleteField, deleteTable, id, addF
 
     return (
         <>
-
             <Box display="flex" padding={3} borderBottom="thick" width="100%" justifyContent="space-between"
                  flexDirection={"column"}>
                 <Box display="flex" width="100%" marginBottom={3} justifyContent="space-between">
-                    {editTitle ? <div style={{display: "flex", justifyContent: "flex-start", maxWidth: 450, width: "-webkit-fill-available" }}>
+                    {editTitle ? <div style={{
+                            display: "flex",
+                            justifyContent: "flex-start",
+                            maxWidth: 450,
+                            width: "-webkit-fill-available"
+                        }}>
                             <Input
-                            value={chartTitle}
-                            onChange={e => setChartTitle(e.target.value)}
-                        />
-                        <Icon justifySelf={"flex-start"} alignSelf={"center"} marginLeft={1} paddingBottom={1}
-                                onClick={() => setEditTitle(false)} name={"check"} size={20} fillColor={"green"}/></div>
+                                value={chartTitle}
+                                onChange={e => setChartTitle(e.target.value)}
+                            />
+                            <Icon justifySelf={"flex-start"} alignSelf={"center"} marginLeft={1} paddingBottom={1}
+                                  onClick={() => setEditTitle(false)} name={"check"} size={20} fillColor={"green"}/></div>
                         : <div style={{display: "flex", justifyContent: "flex-start", maxWidth: 450}}><Heading
                             alignSelf={"flex-start"}
                             justifySelf={"flex-start"}
@@ -366,12 +296,8 @@ function Settings({table, filters, setFields, deleteField, deleteTable, id, addF
                             <div>
                                 <FormField label={index === 0 ? "Eixo Y" : ""} minWidth={150} maxWidth={200}
                                            paddingLeft={0} marginBottom={0}>
-                                    <Select value={filter.field} options={fieldOptions} onChange={field => setFields({...filter, field}, index)} />
-                                    {/*<FieldPicker*/}
-                                    {/*    table={table}*/}
-                                    {/*    field={filter.field}*/}
-                                    {/*    onChange={field => setFields({...filter, field}, index)}*/}
-                                    {/*/>*/}
+                                    <Select value={filter.field} options={fieldOptions}
+                                            onChange={field => setFields({...filter, field}, index)}/>
                                 </FormField></div>
 
                             <div><FormField label={index === 0 ? "Tipo de Gráfico" : ""} minWidth={150} maxWidth={200}
@@ -402,7 +328,6 @@ function Settings({table, filters, setFields, deleteField, deleteTable, id, addF
                         </div>)}
                     </div>
                 )}
-
             </Box>
         </>
     );
