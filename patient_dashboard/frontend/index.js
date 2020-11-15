@@ -1,4 +1,5 @@
-import {loadCSSFromString, loadCSSFromURLAsync} from '@airtable/blocks/ui';
+import {InputSynced, loadCSSFromString, loadCSSFromURLAsync, useGlobalConfig} from '@airtable/blocks/ui';
+
 loadCSSFromURLAsync('https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css')
 import {
     initializeBlock,
@@ -16,16 +17,33 @@ import {globalConfig, viewport} from "@airtable/blocks";
 import Charts from "./components/dashboard_charts";
 import {Menu} from "react-bootstrap-typeahead";
 import {MenuItem} from "react-bootstrap-typeahead";
-import {TypeaheadMenu} from "react-bootstrap-typeahead";
+// import {TypeaheadMenu} from "react-bootstrap-typeahead";
 import {getOptionProperty, getOptionLabel} from "react-bootstrap-typeahead/lib/utils";
+
+const GlobalConfigKeys = {
+    TABLE_ID_EVALS: 'tableIdEvals',
+    VIEW_ID_INITIAL: 'viewIdInitial',
+    X_PATIENT_EMAIL: 'xPatientEmail',
+    X_TYPEAHEAD_VALUE: 'xTypeaheadValue',
+    X_INITIAL_EVAL_ID: 'xInitialEvalId',
+    X_SELECTED_VALUE: 'xSelectedValue'
+};
 
 function Dashboard() {
     const base = useBase();
+    const globalConfig = useGlobalConfig();
 
+    let table; // EVALUATIONS - #EVALS# tag
+    let viewInitial;
     let records;
-    const table = base && base.tables.filter(table => table.description.includes('#EVALS#')) ?
+    let tableId = globalConfig.get(GlobalConfigKeys.TABLE_ID_EVALS);
+    table = base.getTableByIdIfExists(tableId) || base.tables.filter(table => table.description.includes('#EVALS#')) ?
         base.tables.filter(table => table.description.includes('#EVALS#'))[0] : null;
+
+    // table = base && base.tables.filter(table => table.description.includes('#EVALS#')) ?
+    //     base.tables.filter(table => table.description.includes('#EVALS#'))[0] : null;
     console.log('evalTableExists', table);
+    // globalConfig.setAsync(GlobalConfigKeys.TABLE_ID_EVALS, table.id);
 
     const canFindInitialEval = table && table.fields.filter(field => field.name === "Eval Type") &&
         table.fields.filter(field => field.name === "Eval Type").length > 0;
@@ -52,10 +70,12 @@ function Dashboard() {
     let xFieldId = table && table.fields.filter(field => field.description.includes('#EMAIL#')).length > 0 ?
         table.fields.filter(field => field.description.includes('#EMAIL#'))[0].id : null;
 
-    const [options, setOptions] = useState([]);
-    const [value, setValue] = useState(null);
-    const [initialEval, setInitialEval] = useState(null);
-    const [stateRecords, setStateRecords] = useState([]);
+    console.log('xFieldId', xFieldId);
+
+    const [options, setOptions] = useState([]); //
+    const [value, setValue] = useState(null); // patient email value to filter records
+    const [initialEval, setInitialEval] = useState(null); // initial eval record for patient email
+    const [stateRecords, setStateRecords] = useState([]); // record filtered to patient email
 
     const handleSetEval = (value) => {
         console.log('handleSetEval value', value);
@@ -67,11 +87,94 @@ function Dashboard() {
         setValue(value);
     }
 
+    // initialEvalView && (async () => {
+    //     const queryValues = await initialEvalView.selectRecordsAsync();
+    //     await queryValues.loadDataAsync();
+    //     if (queryValues.records && queryValues.records.length > 0) {
+    //         let column = xFieldId;
+    //         let newArray = [...queryValues.records
+    //             .filter(rec => typeof rec.getCellValue(`${column}`) !== 'object')
+    //             .map((rec) => {
+    //                 let nameColumn = table.fields.filter(field => field.description.includes('#NAME#'))[0];
+    //                 return {
+    //                     email: rec.getCellValue(`${column}`),
+    //                     name: rec.getCellValueAsString(nameColumn.id)
+    //                 };
+    //             }).sort()];
+    //         const uniqueSet = new Set(newArray);
+    //         console.log('uniqueSet.values()', uniqueSet.values());
+    //         const finalArray = [...uniqueSet.values()].map((each) => {
+    //             return {
+    //                 label: `${each.name} (${each.email})`,
+    //                 id: each.email,
+    //                 name: each.name,
+    //                 email: each.email
+    //             };
+    //         })
+    //         console.log('finalArray', finalArray);
+    //         setOptions(finalArray);
+    //     }
+    //     console.log('options above', options);
+    // })();
+
+    let patientEmail = globalConfig.get(GlobalConfigKeys.X_PATIENT_EMAIL);
+
+    // if (patientEmail) {
+    //     console.log('patientEmail lower', patientEmail);
+    //     handleSetValue([options.find(each => {
+    //         console.log('each', each);
+    //         return each.email === patientEmail
+    //     })]);
+    // }
+
+    // let selectedValue = globalConfig.get(GlobalConfigKeys.X_SELECTED_VALUE);
+    // if (selectedValue) {
+    //     let tempValue = JSON.parse(selectedValue);
+    //     setValue(tempValue);
+    // }
+
+
+
+
+    let fake = false;
+
+    useEffect(() => {
+            (async () => {
+                const queryValues = await initialEvalView.selectRecordsAsync();
+                await queryValues.loadDataAsync();
+                if (queryValues.records && queryValues.records.length > 0) {
+                    let column = xFieldId;
+                    let newArray = [...queryValues.records
+                        .filter(rec => typeof rec.getCellValue(`${column}`) !== 'object')
+                        .map((rec) => {
+                            let nameColumn = table.fields.filter(field => field.description.includes('#NAME#'))[0];
+                            return {
+                                email: rec.getCellValue(`${column}`),
+                                name: rec.getCellValueAsString(nameColumn.id)
+                            };
+                        }).sort()];
+                    const uniqueSet = new Set(newArray);
+                    console.log('uniqueSet.values()', uniqueSet.values());
+                    const finalArray = [...uniqueSet.values()].map((each) => {
+                        return {
+                            label: `${each.name} (${each.email})`,
+                            id: each.email,
+                            name: each.name,
+                            email: each.email
+                        };
+                    })
+                    setOptions(finalArray);
+                }
+            })();
+        }, []);
+
     useEffect(() => {
         (async () => {
+
             if (table && initialEvalView) {
                 if (xFieldId && !table.getFieldByIdIfExists(xFieldId)) xFieldId = null;
-                if (xFieldId) {
+                console.log('xFieldId', xFieldId);
+                // if (true) {
                     const queryValues = await initialEvalView.selectRecordsAsync();
                     await queryValues.loadDataAsync();
                     if (queryValues.records && queryValues.records.length > 0) {
@@ -86,7 +189,7 @@ function Dashboard() {
                                 };
                             }).sort()];
                         const uniqueSet = new Set(newArray);
-                        // console.log('uniqueSet.values()', uniqueSet.values());
+                        console.log('uniqueSet.values()', uniqueSet.values());
                         const finalArray = [...uniqueSet.values()].map((each) => {
                             return {
                                 label: `${each.name} (${each.email})`,
@@ -99,28 +202,78 @@ function Dashboard() {
                     }
                     const queryRecords = await table.selectRecordsAsync();
                     await queryRecords.loadDataAsync();
-                    records = queryRecords ? queryRecords.records.filter((record) => {
-                            if (value && value.length > 0) return record.getCellValue(`${xFieldId}`) === value[0].email;
+                    // const patientEmail = globalConfig.get(GlobalConfigKeys.X_PATIENT_EMAIL);
+                    records = queryRecords.records ? [...queryRecords.records].filter((record) => {
+                            console.log('value', value);
+                            console.log('patientEmail', patientEmail);
+                            if (patientEmail) return record.getCellValue(`${xFieldId}`) === patientEmail;
                             return record;
                         })
                         : null;
+                    console.log('records', records, options);
+                    console.log('options', options);
+
                     setStateRecords(records);
                     // console.log('records.length', records.length);
-                    if (value && value.length > 0 && records && records.length > 0) {
+                    if (patientEmail && records && records.length > 0) {
                         const exists = records.find((record) =>
                             record.getCellValue('Eval Type') === 'A'
-                            && record.getCellValue(`${xFieldId}`) === value[0].email);
+                            && record.getCellValue(`${xFieldId}`) === patientEmail);
                         // console.log('exists', exists);
                         handleSetEval(exists);
                     } else {
                         handleSetEval(null);
                     }
+                    console.log('initialEval', initialEval);
                 }
+            if (patientEmail && options && options.length > 0) {
+                console.log('patientEmail lower', patientEmail);
+                console.log('patientEmail lower options', options);
+                handleSetValue([options.find(each => {
+                    console.log('each', each);
+                    return each.email === patientEmail
+                })]);
             }
+            // }
+
+            console.log('triggered useEffect table, xFieldId, value')
         })();
-    }, [table, xFieldId, value]);
+    }, [value]);
+
+    useEffect(() => {
+            (async () => {
+                if (patientEmail) {
+                    console.log('patientEmail lower', patientEmail);
+                    console.log('patientEmail lower options', options);
+                    const newSelectedValue = options.find(each => {
+                        console.log('each', each);
+                        return each.email === patientEmail
+                    })
+                    if (newSelectedValue) {
+                        handleSetValue([newSelectedValue]);
+                    }
+
+                }
+            })();
+        }, []);
+
+    const fillValue = () => {
+        if (patientEmail) {
+            console.log('patientEmail lower', patientEmail);
+            console.log('patientEmail lower options', options);
+            const newSelectedValue = options.find(each => {
+                console.log('each', each);
+                return each.email === patientEmail
+            })
+            if (newSelectedValue) {
+                handleSetValue([newSelectedValue]);
+            }
+            return value;
+        }
+    }
 
     const selected = value;
+    console.log('selected', selected);
     const viewport = useViewport();
 
     return (
@@ -134,28 +287,31 @@ function Dashboard() {
                 display="flex"
                 flexDirection="column"
             >
+                {console.log('options', options)}
+
                 <Settings table={table} xFieldValues={options} setFieldValue={handleSetValue}
-                          value={value}/>
-                {selected && initialEval ? (
+                                                         value={value}/>
+
+                {selected && initialEval && options && options.length > 0 ? (
                     <>
                         <Box position="relative" display="flex" flex="auto" flexWrap="wrap" padding={3}>
                             {/*<div style={{display: "flex", maxWidth: viewport.width, flexWrap: "wrap"}}>*/}
-                                <PatientInfo table={table} initialEval={initialEval}/>
-                                <div style={{
-                                    display: "flex",
-                                    maxWidth: viewport.width,
-                                    flexWrap: "wrap",
-                                    flexDirection: "column"
-                                }}>
-                                    <NumericStats table={table} initialEval={initialEval} records={stateRecords}/>
-                                    <MedHistory table={table} initialEval={initialEval}/>
+                            <PatientInfo table={table} initialEval={initialEval}/>
+                            <div style={{
+                                display: "flex",
+                                maxWidth: viewport.width,
+                                flexWrap: "wrap",
+                                flexDirection: "column"
+                            }}>
+                                <NumericStats table={table} initialEval={initialEval} records={stateRecords}/>
+                                <MedHistory table={table} initialEval={initialEval}/>
 
-                                </div>
+                            </div>
                             <HealthTags style={{height: "fit-content"}} table={table} initialEval={initialEval}/>
 
                             {/*</div>*/}
                             {/*<div style={{display: "flex", maxWidth: viewport.width, flexWrap: "wrap"}}>*/}
-                                <Objectives style={{height: "fit-content"}} table={table} initialEval={initialEval}/>
+                            <Objectives style={{height: "fit-content"}} table={table} initialEval={initialEval}/>
                             {/*</div>*/}
                         </Box>
                         <Box position="relative" flex="auto" padding={3}>
@@ -258,7 +414,7 @@ const PatientInfo = ({table, initialEval}) => {
 
     return (
         <>{initialEval ?
-            <DashboardTile height={"fit-content"} width={"fit-content"} >
+            <DashboardTile height={"fit-content"} width={"fit-content"}>
                 <Label>Informações Gerais</Label>
                 <table>
                     <tr>
@@ -552,7 +708,7 @@ const HealthTags = ({table, initialEval}) => {
                     <Box display="flex" flexWrap="wrap" maxWidth={300}
                          style={{display: "flex", justifyContent: "space-evenly", marginTop: 12, flexWrap: "wrap"}}>
                         {tags && tags.length > 0 ? tags.map(tag =>
-                                <HTag label={tag.label} renderIcon={tag.renderIcon} key={tag.id}/>
+                            <HTag label={tag.label} renderIcon={tag.renderIcon} key={tag.id}/>
                         ) : <Text>Nenhum</Text>}
                     </Box>
                     : <Heading>Cannot find TAGS table. Add #TAGS# to table description to ensure it can be
@@ -565,7 +721,7 @@ const HealthTags = ({table, initialEval}) => {
 
 function Settings({table, xFieldValues, setFieldValue, value}) {
 
-    const ref = React.forwardRef(undefined);
+    const ref = React.forwardRef();
 
     const changeBackground = (e) => {
         e.target.style.background = '#F0F0F0';
@@ -585,7 +741,10 @@ function Settings({table, xFieldValues, setFieldValue, value}) {
             ...menuProps
         } = props;
 
+
         const renderMenuItem = (option, position) => {
+            console.log('option', option);
+            if (option === undefined) return;
             const label = getOptionLabel(option, labelKey);
 
             const menuItemProps = {
@@ -609,7 +768,7 @@ function Settings({table, xFieldValues, setFieldValue, value}) {
             //     );
             // }
 
-            if (option.paginationOption) {
+            if (option && option.paginationOption) {
                 return (
                     <Fragment key="pagination-item">
                         <div style={{width: "100%", marginTop: 8, display: "flex", flexDirection: "column"}}
@@ -664,14 +823,17 @@ function Settings({table, xFieldValues, setFieldValue, value}) {
                             options={xFieldValues}
                             onChange={(newValue) => {
                                 console.log('newValue', newValue);
-                                globalConfig.setAsync('xFieldId', newValue);
+                                globalConfig.setAsync(GlobalConfigKeys.X_PATIENT_EMAIL, newValue[0].email);
+                                globalConfig.setAsync(GlobalConfigKeys.X_TYPEAHEAD_VALUE, newValue[0].label);
+                                globalConfig.setAsync(GlobalConfigKeys.X_SELECTED_VALUE, JSON.stringify(newValue));
                                 setFieldValue(newValue)
                             }}
                             id="react-bootstrap-typeahead"
                             open={undefined}
-                            selected={globalConfig.get('xPatientEmail')}
+                            selected={value}
                             renderInput={({inputRef, referenceElementRef, ...inputProps}) => (
-                                <Input
+                                <InputSynced
+                                    globalConfigKey={GlobalConfigKeys.X_TYPEAHEAD_VALUE}
                                     {...inputProps}
                                     ref={(input) => {
                                         inputRef(input);
@@ -683,24 +845,26 @@ function Settings({table, xFieldValues, setFieldValue, value}) {
                             placeholder={"Encontre um paciente..."}
                             paginationText={"          Exibir resultados adicionais..."}
                             renderMenu={(results, menuProps) => {
+                                console.log('results', results);
                                 if (!results.length) {
                                     return null;
                                 }
                                 return <div style={{padding: 0}}>
+                                    {console.log('in typeahead results', results)}
                                     <TypeaheadMenu
                                         options={results}
                                         labelKey="label"
-                                        ref={ref}
-                                        justify={"left"}
+                                        // ref={ref}
                                         paginate
                                         filterBy={['email', 'name']}
                                         flip
-                                        text={ref.current.state.text}
+                                        // text={ref.current.state.text}
+                                        text={globalConfig.get(GlobalConfigKeys.X_TYPEAHEAD_VALUE)}
                                         maxResults={50}
                                         {...menuProps}
                                         renderMenuItemChildren={(option, props, index) => (
                                             <Fragment>
-                                                <div style={{padding: 12, backgroundColor: "white"}} >
+                                                <div style={{padding: 12, backgroundColor: "white"}}>
                                                     <Highlighter search={props.text} style={{fontWeight: 'bold'}}>
                                                         {option[props.labelKey]}
                                                     </Highlighter>
@@ -717,6 +881,9 @@ function Settings({table, xFieldValues, setFieldValue, value}) {
                     <Button alignSelf="flex-end"
                             justifySelf="flex-end"
                             marginBottom={0} onClick={() => {
+                        globalConfig.setAsync(GlobalConfigKeys.X_TYPEAHEAD_VALUE, undefined);
+                        globalConfig.setAsync(GlobalConfigKeys.X_PATIENT_EMAIL, undefined);
+                        globalConfig.setAsync(GlobalConfigKeys.X_SELECTED_VALUE, undefined);
                         setFieldValue(null);
                         ref.current.clear();
                     }}

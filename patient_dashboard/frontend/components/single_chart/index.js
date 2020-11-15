@@ -85,6 +85,8 @@ function SingleChart({table, deleteTable, id, records}) {
             }
 
         })();
+        console.log('triggered useEffect table, records, fields')
+
     }, [table, records, fields]);
     const atLeastOneMetric = () => {
         let flag = false;
@@ -160,7 +162,9 @@ function SingleChart({table, deleteTable, id, records}) {
 
 
             })();
-        }, [data, fields]);
+        console.log('triggered useEffect data, fields')
+
+    }, [data, fields]);
 
     return (
         <Box
