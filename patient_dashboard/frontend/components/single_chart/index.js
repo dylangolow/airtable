@@ -8,32 +8,49 @@ import {
     Heading,
     Icon, Input,
     Select,
-    Text
+    Text, useGlobalConfig
 } from '@airtable/blocks/ui';
 import React, {useEffect, useState} from 'react';
-
-// This app uses chart.js and the react-chartjs-2 packages.
-// Install them by running this in the terminal:
-// npm install chart.js react-chartjs-2
 import {Bar, Line} from 'react-chartjs-2';
+import {GlobalConfigKeys, setLabel} from "../../index";
 
-const GlobalConfigKeys = {
-    TABLE_ID: 'tableId',
-    VIEW_ID: 'viewId',
-    X_FIELD_ID: 'xFieldId',
-    X_PATIENT_EMAIL: 'xPatientEmail'
-};
+function SingleChart({table, deleteTable, id, records, index}) {
 
-function SingleChart({table, deleteTable, id, records}) {
+    const globalConfig = useGlobalConfig();
 
     const initialFieldObj = {field: null, chartOption: null, color: null};
 
     const [fieldSelectOptions, setFieldSelectOptions] = useState([]);
-
     const [xField, setXField] = useState(null);
     const [fields, setFields] = useState([{...initialFieldObj}]);
-
     const [dateField, setDateField] = useState(null);
+    const [chartTitle, setChartTitle] = useState(`Gráfico criado em ${new Date().toLocaleString()}`);
+    const [editTitle, setEditTitle] = useState(false);
+
+    useEffect(() => {
+            (async () => {
+                let chartSaved = globalConfig.get([GlobalConfigKeys.X_CHARTS, id]);
+                // console.log('chartSaved', chartSaved);
+                if (chartSaved) {
+                    let chartData = JSON.parse(chartSaved);
+                    if (chartData) {
+                        setFields(chartData.fields);
+                        setChartTitle(chartData.chartTitle);
+                    }
+                }
+            })();
+        }, []);
+
+    useEffect(() => {
+            (async () => {
+                let oldChart = globalConfig.get([GlobalConfigKeys.X_CHARTS, id]);
+                let chartJson = JSON.stringify({fields, chartTitle});
+                // console.log('chartJson', chartJson);
+                let path = [GlobalConfigKeys.X_CHARTS, id];
+                await globalConfig.setPathsAsync([{path, value: chartJson}])
+                // console.log('globalConfig.get(GlobalConfigKeys.X_CHARTS)', globalConfig.get(GlobalConfigKeys.X_CHARTS));
+            })();
+        }, [chartTitle, fields]);
 
     const handleSetFields = (field, index) => {
         setData(null);
@@ -50,9 +67,9 @@ function SingleChart({table, deleteTable, id, records}) {
             setFields([{...initialFieldObj}]);
             return;
         }
-        console.log('delete field', index);
+        // console.log('delete field', index);
         const removeField = fields.splice(index, 1);
-        console.log('removeField', removeField);
+        // console.log('removeField', removeField);
         setFields([...fields]);
     }
 
@@ -77,7 +94,8 @@ function SingleChart({table, deleteTable, id, records}) {
             if (table) {
                 const tempFieldOptions = table.fields.filter(field => field.description?.includes('#CHART#')).map(field => {
                     return {
-                        label: field.name,
+                        ...setLabel(field),
+                        // label: field.name,
                         value: field.id
                     }
                 });
@@ -104,12 +122,9 @@ function SingleChart({table, deleteTable, id, records}) {
     // const data = records && atLeastOneMetric() ? new_getChartData({records, fields, dateField}) : null;
     let timeFormat = 'MM/DD/YYYY HH:mm';
 
-
-
     useEffect(() => {
             (async () => {
-
-                if (data && atLeastOneMetric()) {
+                if (data && atLeastOneMetric() && data.datasets) {
                     const tempOptions = {
                         maintainAspectRatio: true,
                         scales: {
@@ -159,11 +174,8 @@ function SingleChart({table, deleteTable, id, records}) {
                     };
                     setOptions({...tempOptions});
                 }
-
-
             })();
         console.log('triggered useEffect data, fields')
-
     }, [data, fields]);
 
     return (
@@ -184,7 +196,10 @@ function SingleChart({table, deleteTable, id, records}) {
 
         >
             <Settings table={table} fieldOptions={fieldSelectOptions} filters={fields} setFields={handleSetFields} deleteTable={deleteTable}
-                      deleteField={deleteField} id={id} addField={addField}/>
+                      deleteField={deleteField} id={id} addField={addField}
+                      chartTitle={chartTitle} setChartTitle={setChartTitle}
+            editTitle={editTitle} setEditTitle={setEditTitle}
+            />
             {data && options && atLeastOneMetric() && (
                 <Box position="relative" flex="auto" padding={3} >
                     {console.log('options',options)}
@@ -296,9 +311,8 @@ function getChartData({records, xField}) {
     return data;
 }
 
-function Settings({table, filters, setFields, deleteField, deleteTable, id, addField, fieldOptions}) {
-    const [chartTitle, setChartTitle] = useState(`Chart #${id}`);
-    const [editTitle, setEditTitle] = useState(false);
+function Settings({table, filters, setFields, deleteField, deleteTable, id, addField, fieldOptions, chartTitle, setChartTitle, editTitle, setEditTitle}) {
+
     const chartOptions = [
         {label: 'Linha', value: 'line'},
         {label: 'Barra', value: 'bar'}
@@ -318,13 +332,14 @@ function Settings({table, filters, setFields, deleteField, deleteTable, id, addF
             <Box display="flex" padding={3} borderBottom="thick" width="100%" justifyContent="space-between"
                  flexDirection={"column"}>
                 <Box display="flex" width="100%" marginBottom={3} justifyContent="space-between">
-                    {editTitle ? <div style={{display: "flex", justifyContent: "flex-start", maxWidth: 400}}><Input
-
+                    {editTitle ? <div style={{display: "flex", justifyContent: "flex-start", maxWidth: 450, width: "-webkit-fill-available" }}>
+                            <Input
                             value={chartTitle}
                             onChange={e => setChartTitle(e.target.value)}
-                        /><Icon justifySelf={"flex-start"} alignSelf={"center"} marginLeft={1} paddingBottom={1}
+                        />
+                        <Icon justifySelf={"flex-start"} alignSelf={"center"} marginLeft={1} paddingBottom={1}
                                 onClick={() => setEditTitle(false)} name={"check"} size={20} fillColor={"green"}/></div>
-                        : <div style={{display: "flex", justifyContent: "flex-start", maxWidth: 400}}><Heading
+                        : <div style={{display: "flex", justifyContent: "flex-start", maxWidth: 450}}><Heading
                             alignSelf={"flex-start"}
                             justifySelf={"flex-start"}
                         >

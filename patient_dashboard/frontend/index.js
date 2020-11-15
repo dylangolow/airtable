@@ -20,13 +20,14 @@ import {MenuItem} from "react-bootstrap-typeahead";
 // import {TypeaheadMenu} from "react-bootstrap-typeahead";
 import {getOptionProperty, getOptionLabel} from "react-bootstrap-typeahead/lib/utils";
 
-const GlobalConfigKeys = {
+export const GlobalConfigKeys = {
     TABLE_ID_EVALS: 'tableIdEvals',
     VIEW_ID_INITIAL: 'viewIdInitial',
     X_PATIENT_EMAIL: 'xPatientEmail',
     X_TYPEAHEAD_VALUE: 'xTypeaheadValue',
     X_INITIAL_EVAL_ID: 'xInitialEvalId',
-    X_SELECTED_VALUE: 'xSelectedValue'
+    X_SELECTED_VALUE: 'xSelectedValue',
+    X_CHARTS: 'xCharts'
 };
 
 function Dashboard() {
@@ -226,14 +227,14 @@ function Dashboard() {
                     }
                     console.log('initialEval', initialEval);
                 }
-            if (patientEmail && options && options.length > 0) {
-                console.log('patientEmail lower', patientEmail);
-                console.log('patientEmail lower options', options);
-                handleSetValue([options.find(each => {
-                    console.log('each', each);
-                    return each.email === patientEmail
-                })]);
-            }
+            // if (patientEmail && options && options.length > 0) {
+            //     console.log('patientEmail lower', patientEmail);
+            //     console.log('patientEmail lower options', options);
+            //     handleSetValue([options.find(each => {
+            //         console.log('each', each);
+            //         return each.email === patientEmail
+            //     })]);
+            // }
             // }
 
             console.log('triggered useEffect table, xFieldId, value')
@@ -252,10 +253,58 @@ function Dashboard() {
                     if (newSelectedValue) {
                         handleSetValue([newSelectedValue]);
                     }
+                }
+                const queryValues = await initialEvalView.selectRecordsAsync();
+                await queryValues.loadDataAsync();
+                if (queryValues.records && queryValues.records.length > 0) {
+                    let column = xFieldId;
+                    let newArray = [...queryValues.records
+                        .filter(rec => typeof rec.getCellValue(`${column}`) !== 'object')
+                        .map((rec) => {
+                            let nameColumn = table.fields.filter(field => field.description.includes('#NAME#'))[0];
+                            return {
+                                email: rec.getCellValue(`${column}`),
+                                name: rec.getCellValueAsString(nameColumn.id)
+                            };
+                        }).sort()];
+                    const uniqueSet = new Set(newArray);
+                    console.log('uniqueSet.values()', uniqueSet.values());
+                    const finalArray = [...uniqueSet.values()].map((each) => {
+                        return {
+                            label: `${each.name} (${each.email})`,
+                            id: each.email,
+                            name: each.name,
+                            email: each.email
+                        };
+                    })
+                    setOptions(finalArray);
+                }
+                const queryRecords = await table.selectRecordsAsync();
+                await queryRecords.loadDataAsync();
+                // const patientEmail = globalConfig.get(GlobalConfigKeys.X_PATIENT_EMAIL);
+                records = queryRecords.records ? [...queryRecords.records].filter((record) => {
+                        console.log('value', value);
+                        console.log('patientEmail', patientEmail);
+                        if (patientEmail) return record.getCellValue(`${xFieldId}`) === patientEmail;
+                        return record;
+                    })
+                    : null;
+                console.log('records', records, options);
+                console.log('options', options);
 
+                setStateRecords(records);
+                // console.log('records.length', records.length);
+                if (patientEmail && records && records.length > 0) {
+                    const exists = records.find((record) =>
+                        record.getCellValue('Eval Type') === 'A'
+                        && record.getCellValue(`${xFieldId}`) === patientEmail);
+                    // console.log('exists', exists);
+                    handleSetEval(exists);
+                } else {
+                    handleSetEval(null);
                 }
             })();
-        }, []);
+        }, [initialEval]);
 
     const fillValue = () => {
         if (patientEmail) {
@@ -272,8 +321,8 @@ function Dashboard() {
         }
     }
 
-    const selected = value;
-    console.log('selected', selected);
+    // const selected = value;
+    console.log('value', value);
     const viewport = useViewport();
 
     return (
@@ -292,7 +341,7 @@ function Dashboard() {
                 <Settings table={table} xFieldValues={options} setFieldValue={handleSetValue}
                                                          value={value}/>
 
-                {selected && initialEval && options && options.length > 0 ? (
+                {value && initialEval && options && options.length > 0 ? (
                     <>
                         <Box position="relative" display="flex" flex="auto" flexWrap="wrap" padding={3}>
                             {/*<div style={{display: "flex", maxWidth: viewport.width, flexWrap: "wrap"}}>*/}
@@ -482,7 +531,7 @@ const Objectives = ({table, initialEval}) => {
                                 key={obj.name}>
                                 <td style={{margin: 5}}>{obj.label}</td>
                                 <td style={{margin: 5, alignSelf: "end", textAlign: "end"}}>
-                                    <div>{Array(obj.value * 1).fill(true).map(o => <Icon name="star" size={24}/>)}</div>
+                                    <div>{Array(obj.value * 1).fill(true).map((o, index) => <Icon key={`${obj.name}-star-${index}`} name="star" size={24}/>)}</div>
                                 </td>
                             </tr>)}
                     </table>
@@ -680,7 +729,7 @@ const HealthTags = ({table, initialEval}) => {
                 return {
                     ...record,
                     label: displayName,
-                    renderIcon: <Box display="flex" justifyContent="center" alignContent="center"
+                    renderIcon: <Box key={tag.id} display="flex" justifyContent="center" alignContent="center"
                                      style={{backgroundColor: "#FBDEDE", height: 36, width: 36, borderRadius: 36}}>
                         <span style={{color: "#EA5A5A", fontWeight: "bold", alignSelf: "center"}}>?</span>
                     </Box>
@@ -695,7 +744,7 @@ const HealthTags = ({table, initialEval}) => {
             return {
                 ...record,
                 label: displayName,
-                renderIcon: <img key={attachmentObj.id} src={clientUrl} width={36} alt={record.name}/>
+                renderIcon: <img key={tag.id} src={clientUrl} width={36} alt={record.name}/>
             }
         })
         : null;
@@ -707,8 +756,8 @@ const HealthTags = ({table, initialEval}) => {
                 <div>{tagsTable ?
                     <Box display="flex" flexWrap="wrap" maxWidth={300}
                          style={{display: "flex", justifyContent: "space-evenly", marginTop: 12, flexWrap: "wrap"}}>
-                        {tags && tags.length > 0 ? tags.map(tag =>
-                            <HTag label={tag.label} renderIcon={tag.renderIcon} key={tag.id}/>
+                        {tags && tags.length > 0 ? tags.map((tag, index) =>
+                            <HTag key={`tag${index}-${new Date().getTime()}`} label={tag.label} renderIcon={tag.renderIcon} />
                         ) : <Text>Nenhum</Text>}
                     </Box>
                     : <Heading>Cannot find TAGS table. Add #TAGS# to table description to ensure it can be
@@ -830,7 +879,8 @@ function Settings({table, xFieldValues, setFieldValue, value}) {
                             }}
                             id="react-bootstrap-typeahead"
                             open={undefined}
-                            selected={value}
+                            selected={xFieldValues.find(x => x.email === globalConfig.get(GlobalConfigKeys.X_PATIENT_EMAIL)) ?
+                                    [xFieldValues.find(x => x.email === globalConfig.get(GlobalConfigKeys.X_PATIENT_EMAIL))] : null}
                             renderInput={({inputRef, referenceElementRef, ...inputProps}) => (
                                 <InputSynced
                                     globalConfigKey={GlobalConfigKeys.X_TYPEAHEAD_VALUE}
